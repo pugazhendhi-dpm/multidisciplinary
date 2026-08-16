@@ -1,0 +1,707 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <math.h>
+
+// =====================================================
+// LCD
+// =====================================================
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// =====================================================
+// Pin assignments
+// =====================================================
+const uint8_t VOLTAGE_PIN = 34;
+const uint8_t CURRENT_PIN = 35;
+const uint8_t TEMP_PIN    = 32;
+
+const uint8_t RELAY_PIN = 4;
+
+const uint8_t BUTTON_UP_PIN   = 33;
+const uint8_t BUTTON_DOWN_PIN = 14;
+
+const uint8_t RED_LED_PIN   = 25;
+const uint8_t GREEN_LED_PIN = 26;
+const uint8_t BLUE_LED_PIN  = 27;
+
+// =====================================================
+// Hardware polarity
+// =====================================================
+const bool RELAY_ACTIVE_LOW = true;
+const bool LED_ACTIVE_HIGH = true;
+
+// =====================================================
+// Voltage measurement
+// =====================================================
+// Confirmed by your sensor test:
+//
+// Battery voltage = sensor voltage × 15.652
+//
+// Example:
+// 0.920 V × 15.652 = approximately 14.40 V
+// =====================================================
+const float VOLTAGE_RATIO = 17.652f;
+const float VOLTAGE_OFFSET = 0.0f;
+
+const uint16_t VOLTAGE_SAMPLE_COUNT = 256;
+
+// Voltage low-pass filter.
+// 0.25 gives reasonably fast response with some smoothing.
+const float VOLTAGE_FILTER_ALPHA = 0.25f;
+
+// =====================================================
+// ACS712-30A
+// =====================================================
+const uint16_t CURRENT_SAMPLE_COUNT = 256;
+
+const float ACS712_SENSITIVITY = 0.066f;
+const float CURRENT_CALIBRATION_FACTOR = 1.000f;
+
+float currentZeroVoltage = 2.500f;
+
+const bool REVERSE_CURRENT_DIRECTION = false;
+
+// =====================================================
+// Temperature sensor
+// =====================================================
+// This code assumes an LM35:
+// 10 mV = 1 degree Celsius.
+const uint16_t TEMPERATURE_SAMPLE_COUNT = 64;
+const float LM35_VOLTS_PER_DEGREE = 0.010f;
+
+// =====================================================
+// Battery limits
+// =====================================================
+// Normal observed battery range is approximately 12–14.4 V.
+// These are protection limits, not exact SOC limits.
+const float LOW_BATTERY_LIMIT = 11.20f;
+const float MAX_CHARGE_VOLTAGE = 14.60f;
+
+// Sensor plausibility limits.
+const float MIN_VALID_BATTERY_VOLTAGE = 10.00f;
+const float MAX_VALID_BATTERY_VOLTAGE = 16.00f;
+
+const float MAX_CHARGE_CURRENT = 10.00f;
+const float MAX_BATTERY_TEMPERATURE = 45.00f;
+
+const float MIN_VALID_TEMPERATURE = -20.0f;
+const float MAX_VALID_TEMPERATURE = 80.0f;
+
+// =====================================================
+// SOC cutoff
+// =====================================================
+int cutoffSOC = 75;
+
+const int MIN_CUTOFF_SOC = 50;
+const int MAX_CUTOFF_SOC = 95;
+const int CUTOFF_STEP = 5;
+
+// =====================================================
+// Timing
+// =====================================================
+const uint32_t SENSOR_INTERVAL_MS = 500;
+const uint32_t LCD_INTERVAL_MS = 1000;
+const uint32_t SERIAL_INTERVAL_MS = 1000;
+const uint32_t LCD_PAGE_INTERVAL_MS = 3000;
+const uint32_t BUTTON_DEBOUNCE_MS = 250;
+
+// =====================================================
+// Runtime data
+// =====================================================
+float batteryVoltage = 0.0f;
+float chargingCurrent = 0.0f;
+float batteryTemperature = 0.0f;
+float chargingPower = 0.0f;
+
+int batterySOC = 0;
+
+// SOH cannot be calculated accurately from these sensors alone.
+int batterySOH = 96;
+
+bool overVoltageFault = false;
+bool lowVoltageFault = false;
+bool overCurrentFault = false;
+bool highTemperatureFault = false;
+bool sensorFault = true;
+
+bool masterFault = true;
+bool chargingActive = false;
+bool chargingComplete = false;
+
+uint8_t lcdPage = 0;
+
+uint32_t lastSensorMillis = 0;
+uint32_t lastLCDMillis = 0;
+uint32_t lastSerialMillis = 0;
+uint32_t lastPageMillis = 0;
+uint32_t lastButtonMillis = 0;
+
+// =====================================================
+// Output functions
+// =====================================================
+void writeOutput(uint8_t pin, bool state, bool activeHigh) {
+  bool outputLevel = activeHigh ? state : !state;
+  digitalWrite(pin, outputLevel ? HIGH : LOW);
+}
+
+void setRelay(bool state) {
+  writeOutput(RELAY_PIN, state, !RELAY_ACTIVE_LOW);
+}
+
+void setLED(uint8_t pin, bool state) {
+  writeOutput(pin, state, LED_ACTIVE_HIGH);
+}
+
+void allOutputsOff() {
+  setRelay(false);
+  setLED(RED_LED_PIN, false);
+  setLED(GREEN_LED_PIN, false);
+  setLED(BLUE_LED_PIN, false);
+}
+
+// =====================================================
+// ADC averaging
+// =====================================================
+uint32_t readADCmillivolts(uint8_t pin, uint16_t sampleCount) {
+  uint64_t total = 0;
+
+  for (uint16_t i = 0; i < sampleCount; i++) {
+    total += analogReadMilliVolts(pin);
+    delayMicroseconds(500);
+  }
+
+  return total / sampleCount;
+}
+
+// =====================================================
+// Battery voltage
+// =====================================================
+float readBatteryVoltage() {
+  static bool filterInitialized = false;
+  static float filteredVoltage = 0.0f;
+
+  uint32_t adcMillivolts =
+      readADCmillivolts(VOLTAGE_PIN, VOLTAGE_SAMPLE_COUNT);
+
+  float sensorVoltage =
+      adcMillivolts / 1000.0f;
+
+  float measuredVoltage =
+      (sensorVoltage * VOLTAGE_RATIO) + VOLTAGE_OFFSET;
+
+  if (!filterInitialized) {
+    filteredVoltage = measuredVoltage;
+    filterInitialized = true;
+  }
+  else {
+    filteredVoltage =
+        (VOLTAGE_FILTER_ALPHA * measuredVoltage) +
+        ((1.0f - VOLTAGE_FILTER_ALPHA) * filteredVoltage);
+  }
+
+  return filteredVoltage;
+}
+
+// =====================================================
+// ACS712 current
+// =====================================================
+float readChargingCurrent() {
+  uint32_t adcMillivolts =
+      readADCmillivolts(CURRENT_PIN, CURRENT_SAMPLE_COUNT);
+
+  float sensorVoltage =
+      adcMillivolts / 1000.0f;
+
+  float current =
+      (sensorVoltage - currentZeroVoltage) /
+      ACS712_SENSITIVITY;
+
+  if (REVERSE_CURRENT_DIRECTION) {
+    current = -current;
+  }
+
+  current *= CURRENT_CALIBRATION_FACTOR;
+
+  if (fabs(current) < 0.05f) {
+    current = 0.0f;
+  }
+
+  // Charging application: negative current is treated as zero.
+  if (current < 0.0f) {
+    current = 0.0f;
+  }
+
+  if (current > 30.0f) {
+    current = 30.0f;
+  }
+
+  return current;
+}
+
+// =====================================================
+// LM35 temperature
+// =====================================================
+float readTemperature() {
+  uint32_t adcMillivolts =
+      readADCmillivolts(TEMP_PIN, TEMPERATURE_SAMPLE_COUNT);
+
+  float sensorVoltage =
+      adcMillivolts / 1000.0f;
+
+  // LM35: 10 mV per degree Celsius.
+  return sensorVoltage / LM35_VOLTS_PER_DEGREE;
+}
+
+// =====================================================
+// SOC estimation
+// =====================================================
+int calculateSOC(float voltage) {
+  float soc = 0.0f;
+
+  if (voltage >= 14.40f) {
+    soc = 100.0f;
+  }
+  else if (voltage >= 13.40f) {
+    soc = 70.0f +
+          ((voltage - 13.40f) / 1.00f) * 30.0f;
+  }
+  else if (voltage >= 13.20f) {
+    soc = 50.0f +
+          ((voltage - 13.20f) / 0.20f) * 20.0f;
+  }
+  else if (voltage >= 13.00f) {
+    soc = 30.0f +
+          ((voltage - 13.00f) / 0.20f) * 20.0f;
+  }
+  else if (voltage >= 12.80f) {
+    soc = 15.0f +
+          ((voltage - 12.80f) / 0.20f) * 15.0f;
+  }
+  else if (voltage >= 12.00f) {
+    soc = 5.0f +
+          ((voltage - 12.00f) / 0.80f) * 10.0f;
+  }
+  else {
+    soc = 0.0f;
+  }
+
+  if (soc < 0.0f) {
+    soc = 0.0f;
+  }
+
+  if (soc > 100.0f) {
+    soc = 100.0f;
+  }
+
+  return (int)roundf(soc);
+}
+
+// =====================================================
+// ACS712 zero-current calibration
+// =====================================================
+void calibrateCurrentZero() {
+  Serial.println();
+  Serial.println("ACS712 zero-current calibration");
+  Serial.println("Disconnect charging current.");
+  Serial.println("Starting in 3 seconds...");
+  delay(3000);
+
+  const uint16_t calibrationSamples = 300;
+  uint64_t total = 0;
+
+  for (uint16_t i = 0; i < calibrationSamples; i++) {
+    total += analogReadMilliVolts(CURRENT_PIN);
+    delay(5);
+  }
+
+  currentZeroVoltage =
+      ((float)total / calibrationSamples) / 1000.0f;
+
+  Serial.print("Current zero voltage: ");
+  Serial.print(currentZeroVoltage, 4);
+  Serial.println(" V");
+}
+
+// =====================================================
+// Fault processing
+// =====================================================
+void updateFaults() {
+  overVoltageFault =
+      batteryVoltage >= MAX_CHARGE_VOLTAGE;
+
+  lowVoltageFault =
+      batteryVoltage <= LOW_BATTERY_LIMIT;
+
+  overCurrentFault =
+      chargingCurrent >= MAX_CHARGE_CURRENT;
+
+  highTemperatureFault =
+      batteryTemperature >= MAX_BATTERY_TEMPERATURE;
+
+  sensorFault =
+      isnan(batteryVoltage) ||
+      isnan(chargingCurrent) ||
+      isnan(batteryTemperature) ||
+      batteryVoltage < MIN_VALID_BATTERY_VOLTAGE ||
+      batteryVoltage > MAX_VALID_BATTERY_VOLTAGE ||
+      batteryTemperature < MIN_VALID_TEMPERATURE ||
+      batteryTemperature > MAX_VALID_TEMPERATURE;
+
+  masterFault =
+      overVoltageFault ||
+      lowVoltageFault ||
+      overCurrentFault ||
+      highTemperatureFault ||
+      sensorFault;
+}
+
+const char* faultMessage() {
+  if (sensorFault) {
+    return "SENSOR FAULT";
+  }
+
+  if (overVoltageFault) {
+    return "OVER VOLTAGE";
+  }
+
+  if (overCurrentFault) {
+    return "OVER CURRENT";
+  }
+
+  if (highTemperatureFault) {
+    return "HIGH TEMP";
+  }
+
+  if (lowVoltageFault) {
+    return "LOW BATTERY";
+  }
+
+  return "NO FAULT";
+}
+
+// =====================================================
+// Relay control
+// =====================================================
+void controlCharging() {
+  // Fault always turns charger off.
+  if (masterFault) {
+    chargingActive = false;
+    chargingComplete = false;
+    setRelay(false);
+    return;
+  }
+
+  // Stop when user-selected SOC cutoff is reached.
+  if (batterySOC >= cutoffSOC) {
+    chargingActive = false;
+    chargingComplete = true;
+    setRelay(false);
+    return;
+  }
+
+  chargingActive = true;
+  chargingComplete = false;
+  setRelay(true);
+}
+
+// =====================================================
+// LED control
+// =====================================================
+void updateLEDs() {
+  setLED(RED_LED_PIN, false);
+  setLED(GREEN_LED_PIN, false);
+  setLED(BLUE_LED_PIN, false);
+
+  if (masterFault) {
+    setLED(BLUE_LED_PIN, true);
+  }
+  else if (chargingComplete) {
+    setLED(GREEN_LED_PIN, true);
+  }
+  else if (chargingActive) {
+    setLED(RED_LED_PIN, true);
+  }
+}
+
+// =====================================================
+// Button handling
+// =====================================================
+void handleButtons() {
+  uint32_t now = millis();
+
+  if (now - lastButtonMillis < BUTTON_DEBOUNCE_MS) {
+    return;
+  }
+
+  bool upPressed =
+      digitalRead(BUTTON_UP_PIN) == LOW;
+
+  bool downPressed =
+      digitalRead(BUTTON_DOWN_PIN) == LOW;
+
+  if (upPressed && !downPressed) {
+    cutoffSOC += CUTOFF_STEP;
+
+    if (cutoffSOC > MAX_CUTOFF_SOC) {
+      cutoffSOC = MAX_CUTOFF_SOC;
+    }
+
+    chargingComplete = false;
+    lastButtonMillis = now;
+
+    Serial.print("Cutoff set to ");
+    Serial.print(cutoffSOC);
+    Serial.println("%");
+  }
+
+  if (downPressed && !upPressed) {
+    cutoffSOC -= CUTOFF_STEP;
+
+    if (cutoffSOC < MIN_CUTOFF_SOC) {
+      cutoffSOC = MIN_CUTOFF_SOC;
+    }
+
+    chargingComplete = false;
+    lastButtonMillis = now;
+
+    Serial.print("Cutoff set to ");
+    Serial.print(cutoffSOC);
+    Serial.println("%");
+  }
+}
+
+// =====================================================
+// LCD
+// =====================================================
+void clearLCDRow(uint8_t row) {
+  lcd.setCursor(0, row);
+  lcd.print("                ");
+}
+
+void updateLCD() {
+  clearLCDRow(0);
+  clearLCDRow(1);
+
+  if (masterFault) {
+    lcd.setCursor(0, 0);
+    lcd.print(faultMessage());
+
+    lcd.setCursor(0, 1);
+    lcd.print("CHARGER OFF");
+    return;
+  }
+
+  if (chargingComplete) {
+    lcd.setCursor(0, 0);
+    lcd.print("CHARGE COMPLETE");
+
+    lcd.setCursor(0, 1);
+    lcd.print("SOC:");
+    lcd.print(batterySOC);
+    lcd.print("% CUT:");
+    lcd.print(cutoffSOC);
+    lcd.print("%");
+    return;
+  }
+
+  switch (lcdPage) {
+    case 0:
+      lcd.setCursor(0, 0);
+      lcd.print("V:");
+      lcd.print(batteryVoltage, 2);
+      lcd.print("V");
+
+      lcd.setCursor(0, 1);
+      lcd.print("I:");
+      lcd.print(chargingCurrent, 2);
+      lcd.print("A");
+      break;
+
+    case 1:
+      lcd.setCursor(0, 0);
+      lcd.print("SOC:");
+      lcd.print(batterySOC);
+      lcd.print("%");
+
+      lcd.setCursor(0, 1);
+      lcd.print("SOH:");
+      lcd.print(batterySOH);
+      lcd.print("%");
+      break;
+
+    case 2:
+      lcd.setCursor(0, 0);
+      lcd.print("V:");
+      lcd.print(batteryVoltage, 2);
+      lcd.print("V");
+
+      lcd.setCursor(0, 1);
+      lcd.print("CUT:");
+      lcd.print(cutoffSOC);
+      lcd.print("%");
+      break;
+
+    case 3:
+      lcd.setCursor(0, 0);
+      lcd.print("T:");
+      lcd.print(batteryTemperature, 1);
+      lcd.print("C");
+
+      lcd.setCursor(0, 1);
+      lcd.print("CHARGING");
+      break;
+  }
+}
+
+// =====================================================
+// Serial output
+// =====================================================
+void printSerialData() {
+  Serial.println("--------------------------------");
+
+  Serial.print("Voltage: ");
+  Serial.print(batteryVoltage, 3);
+  Serial.println(" V");
+
+  Serial.print("Current: ");
+  Serial.print(chargingCurrent, 3);
+  Serial.println(" A");
+
+  Serial.print("Power: ");
+  Serial.print(chargingPower, 2);
+  Serial.println(" W");
+
+  Serial.print("Temperature: ");
+  Serial.print(batteryTemperature, 2);
+  Serial.println(" C");
+
+  Serial.print("SOC: ");
+  Serial.print(batterySOC);
+  Serial.println(" %");
+
+  Serial.print("SOH: ");
+  Serial.print(batterySOH);
+  Serial.println(" %");
+
+  Serial.print("Cutoff: ");
+  Serial.print(cutoffSOC);
+  Serial.println(" %");
+
+  Serial.print("Relay: ");
+  Serial.println(chargingActive ? "ON" : "OFF");
+
+  Serial.print("Status: ");
+
+  if (masterFault) {
+    Serial.println(faultMessage());
+  }
+  else if (chargingComplete) {
+    Serial.println("CHARGE COMPLETE");
+  }
+  else {
+    Serial.println("CHARGING");
+  }
+}
+
+// =====================================================
+// Setup
+// =====================================================
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  // Outputs start in safe OFF state.
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  pinMode(BLUE_LED_PIN, OUTPUT);
+
+  allOutputsOff();
+
+  // Buttons connect to GND.
+  pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+
+  // ADC inputs.
+  pinMode(VOLTAGE_PIN, INPUT);
+  pinMode(CURRENT_PIN, INPUT);
+  pinMode(TEMP_PIN, INPUT);
+
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+
+  Wire.begin();
+
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("4S LiFePO4");
+  lcd.setCursor(0, 1);
+  lcd.print("Starting...");
+  delay(2000);
+
+  calibrateCurrentZero();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("System Ready");
+  lcd.setCursor(0, 1);
+  lcd.print("Relay OFF");
+  delay(1500);
+
+  lastSensorMillis = millis();
+  lastLCDMillis = millis();
+  lastSerialMillis = millis();
+  lastPageMillis = millis();
+}
+
+// =====================================================
+// Main loop
+// =====================================================
+void loop() {
+  uint32_t now = millis();
+
+  handleButtons();
+
+  if (now - lastSensorMillis >= SENSOR_INTERVAL_MS) {
+    lastSensorMillis = now;
+
+    batteryVoltage = readBatteryVoltage();
+    chargingCurrent = readChargingCurrent();
+    batteryTemperature = readTemperature();
+
+    chargingPower =
+        batteryVoltage * chargingCurrent;
+
+    batterySOC =
+        calculateSOC(batteryVoltage);
+
+    updateFaults();
+    controlCharging();
+    updateLEDs();
+  }
+
+  if (now - lastPageMillis >= LCD_PAGE_INTERVAL_MS) {
+    lastPageMillis = now;
+
+    if (!masterFault && !chargingComplete) {
+      lcdPage++;
+
+      if (lcdPage > 3) {
+        lcdPage = 0;
+      }
+    }
+  }
+
+  if (now - lastLCDMillis >= LCD_INTERVAL_MS) {
+    lastLCDMillis = now;
+    updateLCD();
+  }
+
+  if (now - lastSerialMillis >= SERIAL_INTERVAL_MS) {
+    lastSerialMillis = now;
+    printSerialData();
+  }
+}
