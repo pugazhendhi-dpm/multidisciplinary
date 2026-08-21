@@ -1,0 +1,4540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<title>SmartCharge 3S3P</title>
+
+<style>
+
+/* =====================================================
+   GLOBAL
+===================================================== */
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}
+
+:root{
+    --blue:#1976ff;
+    --cyan:#16c9f4;
+    --green:#13c98a;
+    --red:#ff5364;
+    --orange:#ffad3d;
+    --purple:#805cff;
+
+    --dark:#162436;
+    --text:#243447;
+    --muted:#8795a5;
+
+    --bg:#f3f8fc;
+    --card:#ffffff;
+    --border:#e4edf4;
+
+    --shadow:0 12px 35px rgba(40,85,120,.10);
+    --soft-shadow:0 6px 20px rgba(40,85,120,.07);
+}
+
+html{
+    scroll-behavior:smooth;
+}
+
+body{
+
+    background:
+    radial-gradient(
+        circle at 0% 0%,
+        rgba(22,201,244,.12),
+        transparent 27%
+    ),
+    radial-gradient(
+        circle at 100% 10%,
+        rgba(25,118,255,.09),
+        transparent 28%
+    ),
+    var(--bg);
+
+    color:var(--text);
+
+    font-family:
+    Inter,
+    "Segoe UI",
+    Roboto,
+    Arial,
+    sans-serif;
+
+    min-height:100vh;
+}
+
+button{
+    font-family:inherit;
+}
+
+/* =====================================================
+   APP
+===================================================== */
+
+.app{
+
+    width:100%;
+    max-width:500px;
+
+    min-height:100vh;
+
+    margin:auto;
+
+    padding:18px 16px 110px;
+}
+
+/* =====================================================
+   HEADER
+===================================================== */
+
+.header{
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    margin-bottom:20px;
+}
+
+.brand{
+
+    display:flex;
+    align-items:center;
+    gap:11px;
+}
+
+.logo{
+
+    width:48px;
+    height:48px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:16px;
+
+    color:white;
+    font-size:22px;
+
+    background:
+    linear-gradient(
+        135deg,
+        #1976ff,
+        #16c9f4
+    );
+
+    box-shadow:
+    0 9px 24px
+    rgba(25,118,255,.25);
+}
+
+.brand h1{
+
+    font-size:18px;
+    font-weight:850;
+    letter-spacing:-.5px;
+}
+
+.brand p{
+
+    color:var(--muted);
+
+    font-size:8px;
+    font-weight:700;
+    letter-spacing:1px;
+
+    margin-top:4px;
+}
+
+.online{
+
+    display:flex;
+    align-items:center;
+    gap:6px;
+
+    padding:8px 10px;
+
+    border-radius:30px;
+
+    background:#eafff6;
+    color:#08a873;
+
+    border:1px solid #c9f4e2;
+
+    font-size:8px;
+    font-weight:850;
+}
+
+.online-dot{
+
+    width:7px;
+    height:7px;
+
+    border-radius:50%;
+
+    background:#13c98a;
+
+    box-shadow:
+    0 0 0 4px
+    rgba(19,201,138,.12);
+}
+
+/* =====================================================
+   SCREENS
+===================================================== */
+
+.screen{
+    display:none;
+    animation:screenIn .35s ease;
+}
+
+.screen.active{
+    display:block;
+}
+
+@keyframes screenIn{
+
+    from{
+        opacity:0;
+        transform:translateY(8px);
+    }
+
+    to{
+        opacity:1;
+        transform:translateY(0);
+    }
+}
+
+/* =====================================================
+   HERO
+===================================================== */
+
+.hero{
+
+    position:relative;
+
+    text-align:center;
+
+    padding:24px 18px 22px;
+
+    border-radius:30px;
+
+    background:
+    linear-gradient(
+        145deg,
+        #ffffff,
+        #f8fcff
+    );
+
+    border:1px solid var(--border);
+
+    box-shadow:var(--shadow);
+
+    overflow:hidden;
+}
+
+.hero::before{
+
+    content:"";
+
+    position:absolute;
+
+    width:210px;
+    height:210px;
+
+    border-radius:50%;
+
+    background:rgba(22,201,244,.07);
+
+    top:-120px;
+    right:-70px;
+}
+
+.hero-title{
+
+    position:relative;
+
+    color:#8b99a7;
+
+    font-size:9px;
+    font-weight:850;
+    letter-spacing:2px;
+    text-transform:uppercase;
+}
+
+/* =====================================================
+   SOC RING
+===================================================== */
+
+.battery{
+
+    position:relative;
+
+    width:225px;
+    height:225px;
+
+    margin:17px auto;
+}
+
+.ring{
+
+    width:225px;
+    height:225px;
+
+    border-radius:50%;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    background:
+    conic-gradient(
+        #1976ff 0deg,
+        #16c9f4 270deg,
+        #e8f0f5 270deg,
+        #e8f0f5 360deg
+    );
+
+    transition:background .7s ease;
+
+    box-shadow:
+    0 16px 40px
+    rgba(25,118,255,.16);
+
+    animation:ringGlow 2.5s infinite;
+}
+
+@keyframes ringGlow{
+
+    0%,100%{
+        filter:brightness(1);
+    }
+
+    50%{
+        filter:brightness(1.05);
+    }
+}
+
+.ring::before{
+
+    content:"";
+
+    position:absolute;
+
+    width:181px;
+    height:181px;
+
+    border-radius:50%;
+
+    background:
+    linear-gradient(
+        145deg,
+        white,
+        #f5faff
+    );
+
+    box-shadow:
+    inset 0 3px 14px
+    rgba(30,70,110,.06);
+}
+
+.soc-content{
+
+    position:absolute;
+
+    inset:0;
+
+    z-index:2;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+}
+
+.soc{
+
+    font-size:57px;
+    line-height:1;
+
+    font-weight:900;
+    letter-spacing:-4px;
+}
+
+.soc span{
+
+    font-size:21px;
+    letter-spacing:0;
+    color:var(--blue);
+}
+
+.battery-name{
+
+    margin-top:8px;
+
+    font-size:9px;
+    color:var(--muted);
+
+    font-weight:800;
+    letter-spacing:.7px;
+}
+
+/* =====================================================
+   STATUS
+===================================================== */
+
+.status{
+
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+
+    padding:9px 16px;
+
+    border-radius:30px;
+
+    background:#eafff6;
+    border:1px solid #cef4e4;
+
+    color:#0baa72;
+
+    font-size:10px;
+    font-weight:850;
+}
+
+.status-dot{
+
+    width:7px;
+    height:7px;
+
+    background:#13c98a;
+
+    border-radius:50%;
+
+    animation:pulse 1.5s infinite;
+}
+
+@keyframes pulse{
+
+    0%{
+        box-shadow:
+        0 0 0 0
+        rgba(19,201,138,.45);
+    }
+
+    70%{
+        box-shadow:
+        0 0 0 8px
+        rgba(19,201,138,0);
+    }
+
+    100%{
+        box-shadow:
+        0 0 0 0
+        rgba(19,201,138,0);
+    }
+}
+
+/* =====================================================
+   METRICS
+===================================================== */
+
+.metrics{
+
+    display:grid;
+    grid-template-columns:1fr 1fr;
+
+    gap:11px;
+
+    margin-top:14px;
+}
+
+.metric{
+
+    background:var(--card);
+
+    border:1px solid var(--border);
+
+    border-radius:20px;
+
+    padding:15px;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.metric-top{
+
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    margin-bottom:12px;
+}
+
+.metric-icon{
+
+    width:35px;
+    height:35px;
+
+    border-radius:11px;
+
+    background:#eef7ff;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    font-size:17px;
+}
+
+.metric-name{
+
+    font-size:8px;
+    color:#8d9aa8;
+
+    font-weight:850;
+    letter-spacing:.8px;
+}
+
+.metric-value{
+
+    font-size:22px;
+    font-weight:850;
+}
+
+.unit{
+
+    font-size:9px;
+    color:#8996a4;
+    font-weight:600;
+}
+
+/* =====================================================
+   SECTION
+===================================================== */
+
+.section{
+    margin-top:19px;
+}
+
+.section-head{
+
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    margin-bottom:10px;
+
+    padding:0 3px;
+}
+
+.section-head h2{
+
+    font-size:14px;
+    font-weight:850;
+}
+
+.section-head span{
+
+    color:#9aa7b4;
+
+    font-size:8px;
+    font-weight:850;
+    letter-spacing:1px;
+}
+
+/* =====================================================
+   GRAPH
+===================================================== */
+
+.chart-card{
+
+    position:relative;
+
+    height:205px;
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:22px;
+
+    box-shadow:var(--soft-shadow);
+
+    overflow:hidden;
+}
+
+.chart-header{
+
+    position:absolute;
+
+    top:14px;
+    left:16px;
+
+    display:flex;
+    align-items:center;
+    gap:6px;
+
+    color:#718091;
+
+    font-size:8px;
+    font-weight:850;
+}
+
+.live-dot{
+
+    width:6px;
+    height:6px;
+
+    border-radius:50%;
+    background:var(--green);
+}
+
+.chart-number{
+
+    position:absolute;
+
+    right:16px;
+    top:11px;
+
+    font-size:17px;
+    font-weight:900;
+    color:var(--blue);
+}
+
+.chart{
+
+    position:absolute;
+
+    left:10px;
+    right:10px;
+    top:45px;
+    bottom:8px;
+}
+
+.chart svg{
+
+    width:100%;
+    height:100%;
+}
+
+.grid-line{
+
+    stroke:#eaf0f5;
+    stroke-width:1;
+}
+
+.graph-line{
+
+    fill:none;
+
+    stroke:url(#gradientLine);
+
+    stroke-width:3;
+
+    stroke-linecap:round;
+    stroke-linejoin:round;
+}
+
+.graph-area{
+    fill:url(#gradientArea);
+}
+
+/* =====================================================
+   CARD
+===================================================== */
+
+.card{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:22px;
+
+    padding:18px;
+
+    box-shadow:var(--soft-shadow);
+}
+
+/* =====================================================
+   CUTOFF
+===================================================== */
+
+.control-header{
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+
+.control-left{
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.control-icon{
+
+    width:39px;
+    height:39px;
+
+    border-radius:12px;
+
+    background:#eef7ff;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    font-size:18px;
+}
+
+.control-left h3{
+    font-size:13px;
+}
+
+.control-left p{
+
+    font-size:9px;
+    color:var(--muted);
+
+    margin-top:3px;
+}
+
+.cutoff-value{
+
+    color:var(--blue);
+
+    font-size:26px;
+    font-weight:900;
+}
+
+.adjust-row{
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    gap:18px;
+
+    margin:20px 0 13px;
+}
+
+.adjust{
+
+    width:44px;
+    height:44px;
+
+    border:none;
+    border-radius:14px;
+
+    background:#edf6ff;
+    color:var(--blue);
+
+    font-size:22px;
+    font-weight:800;
+
+    cursor:pointer;
+}
+
+.adjust:active{
+    transform:scale(.93);
+}
+
+.big-cutoff{
+
+    min-width:85px;
+
+    text-align:center;
+
+    font-size:27px;
+    font-weight:900;
+}
+
+.range{
+
+    width:100%;
+    height:6px;
+
+    appearance:none;
+
+    background:#e6eef4;
+
+    border-radius:10px;
+
+    outline:none;
+}
+
+.range::-webkit-slider-thumb{
+
+    appearance:none;
+
+    width:21px;
+    height:21px;
+
+    border-radius:50%;
+
+    background:
+    linear-gradient(
+        135deg,
+        #1976ff,
+        #16c9f4
+    );
+
+    box-shadow:
+    0 4px 12px
+    rgba(25,118,255,.3);
+}
+
+.range-labels{
+
+    display:flex;
+    justify-content:space-between;
+
+    color:#9aa6b2;
+
+    font-size:8px;
+
+    margin-top:8px;
+}
+
+/* =====================================================
+   ACTION BUTTONS
+===================================================== */
+
+.actions{
+
+    display:grid;
+
+    grid-template-columns:1.35fr 1fr;
+
+    gap:10px;
+
+    margin-top:17px;
+}
+
+.btn{
+
+    border:none;
+
+    border-radius:15px;
+
+    padding:14px 5px;
+
+    font-size:10px;
+    font-weight:900;
+
+    cursor:pointer;
+}
+
+.start{
+
+    background:
+    linear-gradient(
+        135deg,
+        #12c98a,
+        #08a873
+    );
+
+    color:white;
+
+    box-shadow:
+    0 8px 20px
+    rgba(18,201,138,.20);
+}
+
+.stop{
+
+    background:#fff1f3;
+
+    color:#ed5062;
+
+    border:1px solid #ffdce1;
+}
+
+/* =====================================================
+   HEALTH
+===================================================== */
+
+.health{
+
+    display:flex;
+    align-items:center;
+
+    gap:16px;
+}
+
+.health-ring{
+
+    width:78px;
+    height:78px;
+
+    flex-shrink:0;
+
+    border-radius:50%;
+
+    background:
+    conic-gradient(
+        #13c98a 0deg 345deg,
+        #e8f1f5 345deg
+    );
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    position:relative;
+}
+
+.health-ring::before{
+
+    content:"";
+
+    width:61px;
+    height:61px;
+
+    border-radius:50%;
+
+    background:white;
+
+    position:absolute;
+}
+
+.health-percent{
+
+    position:relative;
+
+    z-index:2;
+
+    font-size:15px;
+    font-weight:900;
+}
+
+.health-text h3{
+    font-size:13px;
+}
+
+.health-text p{
+
+    margin-top:5px;
+
+    font-size:9px;
+
+    line-height:1.5;
+
+    color:var(--muted);
+}
+
+/* =====================================================
+   BATTERY LIFE PREDICTION
+===================================================== */
+
+.life-card{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:22px;
+
+    padding:18px;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.life-main{
+
+    display:flex;
+    align-items:center;
+
+    gap:13px;
+}
+
+.life-icon{
+
+    width:52px;
+    height:52px;
+
+    border-radius:16px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    font-size:25px;
+
+    background:
+    linear-gradient(
+        135deg,
+        #eef7ff,
+        #eafff6
+    );
+}
+
+.life-label{
+
+    font-size:8px;
+
+    color:var(--muted);
+
+    font-weight:850;
+
+    letter-spacing:1px;
+}
+
+.life-value{
+
+    margin-top:3px;
+
+    font-size:30px;
+
+    font-weight:900;
+
+    color:var(--dark);
+}
+
+.life-value small{
+
+    font-size:12px;
+
+    color:var(--muted);
+
+    font-weight:700;
+}
+
+.life-sub{
+
+    font-size:8px;
+
+    color:var(--muted);
+
+    margin-top:2px;
+}
+
+.life-sub span{
+
+    color:var(--blue);
+
+    font-weight:850;
+}
+
+.life-progress{
+
+    margin-top:20px;
+}
+
+.life-progress-top{
+
+    display:flex;
+    justify-content:space-between;
+
+    font-size:9px;
+
+    color:var(--muted);
+
+    font-weight:800;
+
+    margin-bottom:7px;
+}
+
+.life-progress-top strong{
+    color:var(--green);
+}
+
+.life-bar{
+
+    width:100%;
+    height:8px;
+
+    border-radius:20px;
+
+    background:#e7eef3;
+
+    overflow:hidden;
+}
+
+#lifeBar{
+
+    width:96%;
+    height:100%;
+
+    border-radius:20px;
+
+    background:
+    linear-gradient(
+        90deg,
+        #13c98a,
+        #16c9f4
+    );
+
+    transition:width .6s ease;
+}
+
+.prediction-grid{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:10px;
+
+    margin-top:15px;
+}
+
+.prediction{
+
+    display:flex;
+    align-items:center;
+
+    gap:9px;
+
+    padding:12px;
+
+    background:#f8fbfd;
+
+    border:1px solid #edf2f6;
+
+    border-radius:15px;
+}
+
+.prediction-icon{
+
+    width:31px;
+    height:31px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    border-radius:10px;
+
+    background:#eef7ff;
+
+    font-size:15px;
+}
+
+.prediction small{
+
+    display:block;
+
+    font-size:7px;
+
+    color:var(--muted);
+
+    font-weight:850;
+}
+
+.prediction strong{
+
+    display:block;
+
+    margin-top:3px;
+
+    font-size:14px;
+
+    font-weight:900;
+}
+
+.future-title{
+
+    margin-top:18px;
+    margin-bottom:9px;
+
+    font-size:10px;
+    font-weight:850;
+}
+
+.future-row{
+
+    display:grid;
+
+    grid-template-columns:repeat(3,1fr);
+
+    gap:7px;
+}
+
+.future-row div{
+
+    text-align:center;
+
+    padding:10px 4px;
+
+    background:#f8fbfd;
+
+    border-radius:12px;
+}
+
+.future-row span{
+
+    display:block;
+
+    color:var(--muted);
+
+    font-size:7px;
+    font-weight:750;
+}
+
+.future-row strong{
+
+    display:block;
+
+    margin-top:4px;
+
+    color:var(--blue);
+
+    font-size:13px;
+}
+
+.prediction-note{
+
+    margin-top:13px;
+
+    padding:10px;
+
+    border-radius:12px;
+
+    background:#fff8eb;
+
+    color:#9b701f;
+
+    font-size:7px;
+
+    line-height:1.5;
+
+    font-weight:700;
+}
+
+/* =====================================================
+   SAFETY
+===================================================== */
+
+.safety{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:22px;
+
+    overflow:hidden;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.safety-row{
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    padding:14px 16px;
+
+    border-bottom:1px solid #edf2f6;
+}
+
+.safety-row:last-child{
+    border-bottom:none;
+}
+
+.safety-left{
+
+    display:flex;
+    align-items:center;
+
+    gap:10px;
+
+    font-size:11px;
+    font-weight:750;
+}
+
+.safety-icon{
+
+    width:32px;
+    height:32px;
+
+    border-radius:10px;
+
+    background:#f1f8fc;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.safe{
+
+    padding:5px 8px;
+
+    border-radius:20px;
+
+    background:#eafff6;
+
+    color:#0bad75;
+
+    font-size:8px;
+
+    font-weight:900;
+}
+
+/* =====================================================
+   ANALYTICS
+===================================================== */
+
+.stat-grid{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:11px;
+}
+
+.stat{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:20px;
+
+    padding:18px;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.stat-label{
+
+    color:var(--muted);
+
+    font-size:9px;
+    font-weight:800;
+}
+
+.stat-value{
+
+    margin-top:9px;
+
+    font-size:23px;
+    font-weight:900;
+}
+
+.stat-unit{
+
+    font-size:9px;
+
+    color:#8d99a5;
+}
+
+/* =====================================================
+   HISTORY
+===================================================== */
+
+.history{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:22px;
+
+    overflow:hidden;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.history-row{
+
+    padding:15px;
+
+    border-bottom:1px solid #edf2f6;
+}
+
+.history-row:last-child{
+    border-bottom:none;
+}
+
+.history-top{
+
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.history-date{
+
+    font-size:11px;
+    font-weight:850;
+}
+
+.complete{
+
+    background:#eafff6;
+
+    color:#0aaa72;
+
+    padding:4px 8px;
+
+    border-radius:15px;
+
+    font-size:7px;
+    font-weight:900;
+}
+
+.history-details{
+
+    display:grid;
+
+    grid-template-columns:repeat(3,1fr);
+
+    margin-top:10px;
+
+    gap:5px;
+}
+
+.history-detail{
+
+    color:var(--muted);
+
+    font-size:8px;
+}
+
+.history-detail strong{
+
+    display:block;
+
+    color:var(--text);
+
+    font-size:10px;
+
+    margin-top:3px;
+}
+
+/* =====================================================
+   BATTERY SCREEN
+===================================================== */
+
+.battery-info{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:22px;
+
+    padding:18px;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.info-row{
+
+    display:flex;
+    justify-content:space-between;
+
+    padding:13px 0;
+
+    border-bottom:1px solid #edf2f6;
+
+    font-size:10px;
+}
+
+.info-row:last-child{
+    border-bottom:none;
+}
+
+.info-label{
+    color:var(--muted);
+}
+
+.info-value{
+    font-weight:850;
+}
+
+/* =====================================================
+   SETTINGS
+===================================================== */
+
+.setting{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:18px;
+
+    padding:16px;
+
+    display:flex;
+
+    justify-content:space-between;
+    align-items:center;
+
+    margin-bottom:10px;
+
+    box-shadow:var(--soft-shadow);
+}
+
+.setting-left{
+
+    display:flex;
+    align-items:center;
+
+    gap:11px;
+}
+
+.setting-icon{
+
+    width:35px;
+    height:35px;
+
+    border-radius:11px;
+
+    background:#eef7ff;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.setting-name{
+
+    font-size:11px;
+    font-weight:800;
+}
+
+.setting-description{
+
+    font-size:8px;
+    color:var(--muted);
+
+    margin-top:3px;
+}
+
+.toggle{
+
+    width:42px;
+    height:24px;
+
+    border-radius:20px;
+
+    background:#dce5ec;
+
+    padding:3px;
+
+    cursor:pointer;
+}
+
+.toggle.on{
+
+    background:
+    linear-gradient(
+        135deg,
+        #1976ff,
+        #16c9f4
+    );
+}
+
+.toggle::after{
+
+    content:"";
+
+    display:block;
+
+    width:18px;
+    height:18px;
+
+    background:white;
+
+    border-radius:50%;
+
+    transition:.25s;
+}
+
+.toggle.on::after{
+
+    transform:
+    translateX(18px);
+}
+
+/* =====================================================
+   EVENT LOG
+===================================================== */
+
+.event{
+
+    display:flex;
+
+    gap:12px;
+
+    padding:14px 0;
+
+    border-bottom:1px solid #edf2f6;
+}
+
+.event:last-child{
+    border-bottom:none;
+}
+
+.event-icon{
+
+    width:34px;
+    height:34px;
+
+    border-radius:11px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    background:#eef7ff;
+}
+
+.event-text h4{
+    font-size:10px;
+}
+
+.event-text p{
+
+    color:var(--muted);
+
+    font-size:8px;
+
+    margin-top:3px;
+}
+
+/* =====================================================
+   NAVIGATION
+===================================================== */
+
+.bottom-nav{
+
+    position:fixed;
+
+    bottom:0;
+    left:50%;
+
+    transform:translateX(-50%);
+
+    width:min(500px,100%);
+
+    padding:10px 6px 16px;
+
+    background:
+    rgba(255,255,255,.94);
+
+    backdrop-filter:blur(18px);
+
+    border-top:1px solid #e3ecf3;
+
+    display:flex;
+
+    justify-content:space-around;
+
+    z-index:100;
+}
+
+.nav{
+
+    min-width:60px;
+
+    text-align:center;
+
+    color:#9aa7b4;
+
+    font-size:8px;
+    font-weight:800;
+
+    cursor:pointer;
+}
+
+.nav-icon{
+
+    font-size:19px;
+
+    margin-bottom:4px;
+
+    transition:.2s;
+}
+
+.nav.active{
+    color:var(--blue);
+}
+
+.nav.active .nav-icon{
+    transform:translateY(-2px);
+}
+
+/* =====================================================
+   TOAST
+===================================================== */
+
+.toast{
+
+    position:fixed;
+
+    left:50%;
+    bottom:88px;
+
+    transform:translate(-50%,20px);
+
+    opacity:0;
+
+    background:#17283b;
+    color:white;
+
+    padding:11px 17px;
+
+    border-radius:30px;
+
+    font-size:9px;
+    font-weight:800;
+
+    transition:.3s;
+
+    z-index:300;
+
+    pointer-events:none;
+}
+
+.toast.show{
+
+    opacity:1;
+
+    transform:translate(-50%,0);
+}
+
+/* =====================================================
+   MOBILE
+===================================================== */
+
+@media(max-width:370px){
+
+    .app{
+        padding-left:12px;
+        padding-right:12px;
+    }
+
+    .battery,
+    .ring{
+        width:205px;
+        height:205px;
+    }
+
+    .ring::before{
+        width:164px;
+        height:164px;
+    }
+
+    .soc{
+        font-size:50px;
+    }
+
+    .prediction{
+        padding:9px;
+    }
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- =====================================================
+     HEADER
+===================================================== -->
+
+<header class="header">
+
+    <div class="brand">
+
+        <div class="logo">⚡</div>
+
+        <div>
+
+            <h1>SmartCharge</h1>
+
+            <p>3S3P BATTERY MANAGEMENT SYSTEM</p>
+
+        </div>
+
+    </div>
+
+    <div class="online">
+
+        <span class="online-dot"></span>
+
+        ESP32 ONLINE
+
+    </div>
+
+</header>
+
+
+<!-- =====================================================
+     DASHBOARD
+===================================================== -->
+
+<main id="dashboard" class="screen active">
+
+    <!-- BATTERY -->
+
+    <section class="hero">
+
+        <div class="hero-title">
+            Battery State of Charge
+        </div>
+
+        <div class="battery">
+
+            <div class="ring" id="ring"></div>
+
+            <div class="soc-content">
+
+                <div class="soc">
+
+                    <span id="soc">75</span>
+
+                    <span>%</span>
+
+                </div>
+
+                <div class="battery-name">
+                    3S3P Li-ion • 11.1V NOMINAL
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="status">
+
+            <span class="status-dot"></span>
+
+            <span id="status">CHARGER OFF</span>
+
+        </div>
+
+    </section>
+
+
+    <!-- METRICS -->
+
+    <section class="metrics">
+
+        <div class="metric">
+
+            <div class="metric-top">
+
+                <div class="metric-icon">🔋</div>
+
+                <div class="metric-name">
+                    VOLTAGE
+                </div>
+
+            </div>
+
+            <div class="metric-value">
+
+                <span id="voltage">11.70</span>
+
+                <span class="unit">V</span>
+
+            </div>
+
+        </div>
+
+
+        <div class="metric">
+
+            <div class="metric-top">
+
+                <div class="metric-icon">⚡</div>
+
+                <div class="metric-name">
+                    CURRENT
+                </div>
+
+            </div>
+
+            <div class="metric-value">
+
+                <span id="current">0.00</span>
+
+                <span class="unit">A</span>
+
+            </div>
+
+        </div>
+
+
+        <div class="metric">
+
+            <div class="metric-top">
+
+                <div class="metric-icon">🔌</div>
+
+                <div class="metric-name">
+                    POWER
+                </div>
+
+            </div>
+
+            <div class="metric-value">
+
+                <span id="power">0.00</span>
+
+                <span class="unit">W</span>
+
+            </div>
+
+        </div>
+
+
+        <div class="metric">
+
+            <div class="metric-top">
+
+                <div class="metric-icon">🌡️</div>
+
+                <div class="metric-name">
+                    TEMPERATURE
+                </div>
+
+            </div>
+
+            <div class="metric-value">
+
+                <span id="temp">31.4</span>
+
+                <span class="unit">°C</span>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- GRAPH -->
+
+    <section class="section">
+
+        <div class="section-head">
+
+            <h2>Live Charging</h2>
+
+            <span>REAL-TIME</span>
+
+        </div>
+
+        <div class="chart-card">
+
+            <div class="chart-header">
+
+                <span class="live-dot"></span>
+
+                BATTERY VOLTAGE
+
+            </div>
+
+            <div class="chart-number" id="chartValue">
+                11.70 V
+            </div>
+
+            <div class="chart">
+
+                <svg viewBox="0 0 500 120"
+                     preserveAspectRatio="none">
+
+                    <defs>
+
+                        <linearGradient
+                            id="gradientLine"
+                            x1="0"
+                            y1="0"
+                            x2="1"
+                            y2="0">
+
+                            <stop
+                                offset="0%"
+                                stop-color="#1976ff">
+
+                            </stop>
+
+                            <stop
+                                offset="100%"
+                                stop-color="#16c9f4">
+
+                            </stop>
+
+                        </linearGradient>
+
+
+                        <linearGradient
+                            id="gradientArea"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1">
+
+                            <stop
+                                offset="0%"
+                                stop-color="#16c9f4"
+                                stop-opacity=".25">
+
+                            </stop>
+
+                            <stop
+                                offset="100%"
+                                stop-color="#16c9f4"
+                                stop-opacity="0">
+
+                            </stop>
+
+                        </linearGradient>
+
+                    </defs>
+
+                    <line
+                        x1="0"
+                        y1="20"
+                        x2="500"
+                        y2="20"
+                        class="grid-line">
+                    </line>
+
+                    <line
+                        x1="0"
+                        y1="50"
+                        x2="500"
+                        y2="50"
+                        class="grid-line">
+                    </line>
+
+                    <line
+                        x1="0"
+                        y1="80"
+                        x2="500"
+                        y2="80"
+                        class="grid-line">
+                    </line>
+
+                    <line
+                        x1="0"
+                        y1="110"
+                        x2="500"
+                        y2="110"
+                        class="grid-line">
+                    </line>
+
+                    <path
+                        id="area"
+                        class="graph-area">
+                    </path>
+
+                    <path
+                        id="graph"
+                        class="graph-line">
+                    </path>
+
+                </svg>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- CUTOFF -->
+
+    <section class="section">
+
+        <div class="section-head">
+
+            <h2>Charging Control</h2>
+
+            <span>USER CONTROL</span>
+
+        </div>
+
+        <div class="card">
+
+            <div class="control-header">
+
+                <div class="control-left">
+
+                    <div class="control-icon">
+                        🎯
+                    </div>
+
+                    <div>
+
+                        <h3>
+                            Automatic Cutoff
+                        </h3>
+
+                        <p>
+                            Charger stops at selected SOC
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div
+                    class="cutoff-value"
+                    id="cutoffTop">
+
+                    75%
+
+                </div>
+
+            </div>
+
+
+            <div class="adjust-row">
+
+                <button
+                    class="adjust"
+                    onclick="changeCutoff(-5)">
+
+                    −
+
+                </button>
+
+                <div
+                    class="big-cutoff"
+                    id="cutoffDisplay">
+
+                    75%
+
+                </div>
+
+                <button
+                    class="adjust"
+                    onclick="changeCutoff(5)">
+
+                    +
+
+                </button>
+
+            </div>
+
+
+            <input
+                class="range"
+                id="cutoffSlider"
+                type="range"
+                min="50"
+                max="95"
+                step="5"
+                value="75">
+
+
+            <div class="range-labels">
+
+                <span>50%</span>
+                <span>75%</span>
+                <span>95%</span>
+
+            </div>
+
+
+            <div class="actions">
+
+                <button
+                    class="btn start"
+                    onclick="startCharging()">
+
+                    ⚡ START CHARGING
+
+                </button>
+
+                <button
+                    class="btn stop"
+                    onclick="stopCharging()">
+
+                    ■ STOP CHARGING
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- HEALTH -->
+
+    <section class="section">
+
+        <div class="section-head">
+
+            <h2>Battery Health</h2>
+
+            <span>SOH</span>
+
+        </div>
+
+        <div class="card">
+
+            <div class="health">
+
+                <div class="health-ring">
+
+                    <div
+                        class="health-percent"
+                        id="healthPercent">
+
+                        96%
+
+                    </div>
+
+                </div>
+
+                <div class="health-text">
+
+                    <h3 id="healthTitle">
+                        Excellent Health
+                    </h3>
+
+                    <p>
+                        Battery performance is within
+                        healthy operating limits.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- BATTERY LIFE PREDICTION -->
+
+    <section class="section">
+
+        <div class="section-head">
+
+            <h2>Battery Life Prediction</h2>
+
+            <span>ESTIMATE</span>
+
+        </div>
+
+        <div class="life-card">
+
+            <div class="life-main">
+
+                <div class="life-icon">
+                    🔮
+                </div>
+
+                <div>
+
+                    <div class="life-label">
+                        ESTIMATED REMAINING LIFE
+                    </div>
+
+                    <div class="life-value">
+
+                        <span id="remainingYears">
+                            4.4
+                        </span>
+
+                        <small>Years</small>
+
+                    </div>
+
+                    <div class="life-sub">
+
+                        Approximately
+                        <span id="remainingMonths">
+                            53
+                        </span>
+                        months remaining
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="life-progress">
+
+                <div class="life-progress-top">
+
+                    <span>
+                        USEFUL BATTERY LIFE
+                    </span>
+
+                    <strong>
+                        <span id="lifePercent">
+                            100
+                        </span>%
+                    </strong>
+
+                </div>
+
+                <div class="life-bar">
+
+                    <div id="lifeBar"></div>
+
+                </div>
+
+            </div>
+
+
+            <div class="prediction-grid">
+
+                <div class="prediction">
+
+                    <span class="prediction-icon">
+                        🔄
+                    </span>
+
+                    <div>
+
+                        <small>
+                            REMAINING CYCLES
+                        </small>
+
+                        <strong id="remainingCycles">
+                            800
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div class="prediction">
+
+                    <span class="prediction-icon">
+                        📈
+                    </span>
+
+                    <div>
+
+                        <small>
+                            CYCLES USED
+                        </small>
+
+                        <strong id="cyclesUsed">
+                            200
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div class="prediction">
+
+                    <span class="prediction-icon">
+                        ⚡
+                    </span>
+
+                    <div>
+
+                        <small>
+                            TOTAL EFC
+                        </small>
+
+                        <strong id="totalCycles">
+                            200
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div class="prediction">
+
+                    <span class="prediction-icon">
+                        💚
+                    </span>
+
+                    <div>
+
+                        <small>
+                            CURRENT SOH
+                        </small>
+
+                        <strong id="predictedSOH">
+                            96%
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="future-title">
+                Predicted Battery Health
+            </div>
+
+
+            <div class="future-row">
+
+                <div>
+
+                    <span>
+                        500 cycles
+                    </span>
+
+                    <strong id="soh500">
+                        90%
+                    </strong>
+
+                </div>
+
+                <div>
+
+                    <span>
+                        1000 cycles
+                    </span>
+
+                    <strong id="soh1000">
+                        80%
+                    </strong>
+
+                </div>
+
+                <div>
+
+                    <span>
+                        1500 cycles
+                    </span>
+
+                    <strong id="soh1500">
+                        70%
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="prediction-note">
+
+                ⚠ Prediction is an estimate based on
+                equivalent full cycles, temperature and
+                charging behavior. Actual battery life
+                depends on real battery measurements.
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- PROTECTION -->
+
+    <section class="section">
+
+        <div class="section-head">
+
+            <h2>Protection Center</h2>
+
+            <span>SYSTEM CHECK</span>
+
+        </div>
+
+        <div class="safety">
+
+            <div class="safety-row">
+
+                <div class="safety-left">
+
+                    <div class="safety-icon">
+                        🔋
+                    </div>
+
+                    Over Voltage
+
+                </div>
+
+                <span class="safe">
+                    NORMAL
+                </span>
+
+            </div>
+
+
+            <div class="safety-row">
+
+                <div class="safety-left">
+
+                    <div class="safety-icon">
+                        ⚡
+                    </div>
+
+                    Over Current
+
+                </div>
+
+                <span class="safe">
+                    NORMAL
+                </span>
+
+            </div>
+
+
+            <div class="safety-row">
+
+                <div class="safety-left">
+
+                    <div class="safety-icon">
+                        🌡️
+                    </div>
+
+                    Temperature
+
+                </div>
+
+                <span class="safe">
+                    NORMAL
+                </span>
+
+            </div>
+
+
+            <div class="safety-row">
+
+                <div class="safety-left">
+
+                    <div class="safety-icon">
+                        📡
+                    </div>
+
+                    Sensors
+
+                </div>
+
+                <span class="safe">
+                    CONNECTED
+                </span>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</main>
+
+
+<!-- =====================================================
+     ANALYTICS SCREEN
+===================================================== -->
+
+<section id="analytics" class="screen">
+
+    <div class="section-head">
+
+        <h2>Battery Analytics</h2>
+
+        <span>PERFORMANCE</span>
+
+    </div>
+
+
+    <div class="stat-grid">
+
+        <div class="stat">
+
+            <div class="stat-label">
+                ENERGY CHARGED
+            </div>
+
+            <div class="stat-value">
+
+                <span id="energyCharged">
+                    38
+                </span>
+
+                <span class="stat-unit">
+                    Wh
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="stat-label">
+                CHARGING TIME
+            </div>
+
+            <div class="stat-value">
+                <span id="chargingTime">
+                    42m
+                </span>
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="stat-label">
+                AVG CURRENT
+            </div>
+
+            <div class="stat-value">
+
+                <span id="avgCurrent">
+                    1.10
+                </span>
+
+                <span class="stat-unit">
+                    A
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <div class="stat">
+
+            <div class="stat-label">
+                MAX TEMP
+            </div>
+
+            <div class="stat-value">
+
+                <span id="maxTemp">
+                    34.2
+                </span>
+
+                <span class="stat-unit">
+                    °C
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="section-head">
+
+            <h2>Charging History</h2>
+
+            <span>RECENT</span>
+
+        </div>
+
+
+        <div class="history">
+
+            <div class="history-row">
+
+                <div class="history-top">
+
+                    <div class="history-date">
+                        Today • 14:25
+                    </div>
+
+                    <span class="complete">
+                        COMPLETE
+                    </span>
+
+                </div>
+
+
+                <div class="history-details">
+
+                    <div class="history-detail">
+
+                        SOC
+
+                        <strong>
+                            42 → 75%
+                        </strong>
+
+                    </div>
+
+                    <div class="history-detail">
+
+                        Energy
+
+                        <strong>
+                            38 Wh
+                        </strong>
+
+                    </div>
+
+                    <div class="history-detail">
+
+                        Time
+
+                        <strong>
+                            42m
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="history-row">
+
+                <div class="history-top">
+
+                    <div class="history-date">
+                        Yesterday • 10:10
+                    </div>
+
+                    <span class="complete">
+                        COMPLETE
+                    </span>
+
+                </div>
+
+
+                <div class="history-details">
+
+                    <div class="history-detail">
+
+                        SOC
+
+                        <strong>
+                            35 → 75%
+                        </strong>
+
+                    </div>
+
+                    <div class="history-detail">
+
+                        Energy
+
+                        <strong>
+                            41 Wh
+                        </strong>
+
+                    </div>
+
+                    <div class="history-detail">
+
+                        Time
+
+                        <strong>
+                            46m
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="history-row">
+
+                <div class="history-top">
+
+                    <div class="history-date">
+                        Aug 14 • 09:20
+                    </div>
+
+                    <span class="complete">
+                        COMPLETE
+                    </span>
+
+                </div>
+
+
+                <div class="history-details">
+
+                    <div class="history-detail">
+
+                        SOC
+
+                        <strong>
+                            40 → 85%
+                        </strong>
+
+                    </div>
+
+                    <div class="history-detail">
+
+                        Energy
+
+                        <strong>
+                            52 Wh
+                        </strong>
+
+                    </div>
+
+                    <div class="history-detail">
+
+                        Time
+
+                        <strong>
+                            58m
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="section-head">
+
+            <h2>Event Log</h2>
+
+            <span>ACTIVITY</span>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="event">
+
+                <div class="event-icon">
+                    ⚡
+                </div>
+
+                <div class="event-text">
+
+                    <h4>
+                        Charging Started
+                    </h4>
+
+                    <p>
+                        Today • 14:25
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="event">
+
+                <div class="event-icon">
+                    🎯
+                </div>
+
+                <div class="event-text">
+
+                    <h4>
+                        Cutoff Changed to 75%
+                    </h4>
+
+                    <p>
+                        Today • 14:20
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="event">
+
+                <div class="event-icon">
+                    ✓
+                </div>
+
+                <div class="event-text">
+
+                    <h4>
+                        Previous Charge Complete
+                    </h4>
+
+                    <p>
+                        Yesterday • 11:32
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     BATTERY SCREEN
+===================================================== -->
+
+<section id="batteryScreen" class="screen">
+
+    <div class="section-head">
+
+        <h2>Battery Information</h2>
+
+        <span>3S3P Li-ion</span>
+
+    </div>
+
+
+    <div class="card">
+
+        <div class="health">
+
+            <div class="health-ring">
+
+                <div
+                    class="health-percent"
+                    id="batteryScreenSOH">
+
+                    96%
+
+                </div>
+
+            </div>
+
+            <div class="health-text">
+
+                <h3>
+                    Battery Health
+                </h3>
+
+                <p>
+                    Estimated SOH based on cycle
+                    and system monitoring.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="battery-info">
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Battery Type
+                </span>
+
+                <span class="info-value">
+                    Li-ion
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Configuration
+                </span>
+
+                <span class="info-value">
+                    3S3P
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Nominal Voltage
+                </span>
+
+                <span class="info-value">
+                    11.1 V
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Full Charge Voltage
+                </span>
+
+                <span class="info-value">
+                    12.6 V
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Current Sensor
+                </span>
+
+                <span class="info-value">
+                    INA219
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Temperature Sensor
+                </span>
+
+                <span class="info-value">
+                    ESP32 ADC / Sensor
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Controller
+                </span>
+
+                <span class="info-value">
+                    ESP32
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Design Cycle Life
+                </span>
+
+                <span class="info-value">
+                    1000 EFC
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    End-of-Life SOH
+                </span>
+
+                <span class="info-value">
+                    80%
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     SETTINGS
+===================================================== -->
+
+<section id="settings" class="screen">
+
+    <div class="section-head">
+
+        <h2>Settings</h2>
+
+        <span>SYSTEM</span>
+
+    </div>
+
+
+    <div class="setting">
+
+        <div class="setting-left">
+
+            <div class="setting-icon">
+                🔔
+            </div>
+
+            <div>
+
+                <div class="setting-name">
+                    Charging Notifications
+                </div>
+
+                <div class="setting-description">
+                    Notify when charging completes
+                </div>
+
+            </div>
+
+        </div>
+
+        <div
+            class="toggle on"
+            onclick="toggleSetting(this)">
+        </div>
+
+    </div>
+
+
+    <div class="setting">
+
+        <div class="setting-left">
+
+            <div class="setting-icon">
+                🚨
+            </div>
+
+            <div>
+
+                <div class="setting-name">
+                    Fault Alerts
+                </div>
+
+                <div class="setting-description">
+                    Alert on safety faults
+                </div>
+
+            </div>
+
+        </div>
+
+        <div
+            class="toggle on"
+            onclick="toggleSetting(this)">
+        </div>
+
+    </div>
+
+
+    <div class="setting">
+
+        <div class="setting-left">
+
+            <div class="setting-icon">
+                📡
+            </div>
+
+            <div>
+
+                <div class="setting-name">
+                    ESP32 Auto Connect
+                </div>
+
+                <div class="setting-description">
+                    Automatically reconnect device
+                </div>
+
+            </div>
+
+        </div>
+
+        <div
+            class="toggle on"
+            onclick="toggleSetting(this)">
+        </div>
+
+    </div>
+
+
+    <div class="setting">
+
+        <div class="setting-left">
+
+            <div class="setting-icon">
+                📊
+            </div>
+
+            <div>
+
+                <div class="setting-name">
+                    Data Logging
+                </div>
+
+                <div class="setting-description">
+                    Save battery monitoring data
+                </div>
+
+            </div>
+
+        </div>
+
+        <div
+            class="toggle on"
+            onclick="toggleSetting(this)">
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="section-head">
+
+            <h2>Device</h2>
+
+            <span>ESP32</span>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Device Name
+                </span>
+
+                <span class="info-value">
+                    SmartCharge-01
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Connection
+                </span>
+
+                <span
+                    class="info-value"
+                    style="color:#0aaa72">
+
+                    ● Online
+
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Firmware
+                </span>
+
+                <span class="info-value">
+                    v1.0.0
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="section">
+
+        <div class="section-head">
+
+            <h2>Safety</h2>
+
+            <span>LIMITS</span>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Maximum Voltage
+                </span>
+
+                <span class="info-value">
+                    12.60 V
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Maximum Charging Current
+                </span>
+
+                <span class="info-value">
+                    2.00 A
+                </span>
+
+            </div>
+
+
+            <div class="info-row">
+
+                <span class="info-label">
+                    Maximum Temperature
+                </span>
+
+                <span class="info-value">
+                    45 °C
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+</div>
+
+
+<!-- =====================================================
+     BOTTOM NAV
+===================================================== -->
+
+<nav class="bottom-nav">
+
+    <div
+        class="nav active"
+        onclick="openScreen('dashboard',this)">
+
+        <div class="nav-icon">
+            ⌂
+        </div>
+
+        Dashboard
+
+    </div>
+
+
+    <div
+        class="nav"
+        onclick="openScreen('analytics',this)">
+
+        <div class="nav-icon">
+            ◴
+        </div>
+
+        Analytics
+
+    </div>
+
+
+    <div
+        class="nav"
+        onclick="openScreen('batteryScreen',this)">
+
+        <div class="nav-icon">
+            🔋
+        </div>
+
+        Battery
+
+    </div>
+
+
+    <div
+        class="nav"
+        onclick="openScreen('settings',this)">
+
+        <div class="nav-icon">
+            ⚙
+        </div>
+
+        Settings
+
+    </div>
+
+</nav>
+
+
+<!-- TOAST -->
+
+<div
+    class="toast"
+    id="toast">
+
+    Charging cutoff reached
+
+</div>
+
+
+<script>
+
+/* =====================================================
+   BATTERY CONFIGURATION
+===================================================== */
+
+/*
+   3S3P Li-ion
+
+   Example:
+   3.0 Ah cells × 3 cells in parallel
+   = approximately 9 Ah pack capacity.
+
+   Change this to the ACTUAL capacity of your cells.
+*/
+
+const batteryCapacityAh = 9.0;
+
+
+/*
+   Expected design life.
+
+   This is an estimate only.
+   Replace it with the cycle-life specification
+   of your actual cells.
+*/
+
+const designCycleLife = 1000;
+
+
+/*
+   Battery considered at end-of-life
+   when SOH reaches 80%.
+*/
+
+const endOfLifeSOH = 80;
+
+
+/*
+   Example historical usage.
+
+   200 EFC means the pack has already used
+   approximately 200 equivalent full cycles.
+
+   For a real ESP32 system this value should
+   come from stored EEPROM/Preferences data.
+*/
+
+let totalEFC = 200;
+
+
+/*
+   Average daily battery usage.
+
+   0.5 EFC/day = approximately half of one
+   complete charge/discharge cycle every day.
+
+   Change this based on your actual usage.
+*/
+
+const dailyEFC = 0.5;
+
+
+/* =====================================================
+   VARIABLES
+===================================================== */
+
+let soc = 75;
+
+let voltage = 11.70;
+
+let current = 0;
+
+let temperature = 31.4;
+
+let cutoff = 75;
+
+let charging = false;
+
+let energy = 38;
+
+let chargingSeconds = 0;
+
+let maxTemperature = 34.2;
+
+let currentSamples = [];
+
+let chartValues = [
+    11.28,
+    11.32,
+    11.36,
+    11.40,
+    11.44,
+    11.48,
+    11.53,
+    11.58,
+    11.63,
+    11.68,
+    11.72,
+    11.76
+];
+
+
+/* =====================================================
+   ELEMENTS
+===================================================== */
+
+const ring =
+document.getElementById("ring");
+
+const socElement =
+document.getElementById("soc");
+
+const voltageElement =
+document.getElementById("voltage");
+
+const currentElement =
+document.getElementById("current");
+
+const powerElement =
+document.getElementById("power");
+
+const tempElement =
+document.getElementById("temp");
+
+const statusElement =
+document.getElementById("status");
+
+const slider =
+document.getElementById("cutoffSlider");
+
+const cutoffDisplay =
+document.getElementById("cutoffDisplay");
+
+const cutoffTop =
+document.getElementById("cutoffTop");
+
+const chartValue =
+document.getElementById("chartValue");
+
+const graph =
+document.getElementById("graph");
+
+const area =
+document.getElementById("area");
+
+
+/* =====================================================
+   SCREEN NAVIGATION
+===================================================== */
+
+function openScreen(screenID,navElement){
+
+    document
+    .querySelectorAll(".screen")
+    .forEach(screen => {
+
+        screen.classList.remove("active");
+
+    });
+
+
+    document
+    .getElementById(screenID)
+    .classList.add("active");
+
+
+    document
+    .querySelectorAll(".nav")
+    .forEach(nav => {
+
+        nav.classList.remove("active");
+
+    });
+
+
+    navElement.classList.add("active");
+
+
+    window.scrollTo({
+        top:0,
+        behavior:"smooth"
+    });
+
+}
+
+
+/* =====================================================
+   BATTERY SOC RING
+===================================================== */
+
+function updateBattery(){
+
+    let degrees =
+        Math.max(
+            0,
+            Math.min(
+                100,
+                soc
+            )
+        ) * 3.6;
+
+
+    ring.style.background =
+
+    `conic-gradient(
+        #1976ff 0deg,
+        #16c9f4 ${degrees}deg,
+        #e8f0f5 ${degrees}deg,
+        #e8f0f5 360deg
+    )`;
+
+
+    socElement.textContent =
+        Math.round(soc);
+
+}
+
+
+/* =====================================================
+   BATTERY HEALTH
+===================================================== */
+
+function calculateSOH(){
+
+    /*
+       Cycle-based degradation model.
+
+       100% at zero cycles
+       80% at 1000 EFC
+    */
+
+    let cycleSOH =
+        100 -
+        (
+            totalEFC /
+            designCycleLife
+        ) * 20;
+
+
+    cycleSOH =
+        Math.max(
+            endOfLifeSOH,
+            Math.min(
+                100,
+                cycleSOH
+            )
+        );
+
+
+    /*
+       Simulated measured SOH.
+
+       In the real project this should come from
+       actual capacity testing.
+    */
+
+    const measuredSOH = 96;
+
+
+    return Math.min(
+        measuredSOH,
+        cycleSOH
+    );
+
+}
+
+
+/* =====================================================
+   BATTERY LIFE PREDICTION
+===================================================== */
+
+function updateBatteryLifePrediction(){
+
+    const soh =
+        calculateSOH();
+
+
+    /*
+       Useful remaining cycles until 80% SOH.
+    */
+
+    const usefulCycleLife =
+        designCycleLife;
+
+
+    const remainingCycles =
+        Math.max(
+            0,
+            usefulCycleLife -
+            totalEFC
+        );
+
+
+    /*
+       Estimate remaining time.
+    */
+
+    const remainingDays =
+        remainingCycles /
+        Math.max(
+            0.01,
+            dailyEFC
+        );
+
+
+    const remainingYears =
+        remainingDays / 365;
+
+
+    const remainingMonths =
+        remainingDays / 30.44;
+
+
+    /*
+       Useful life percentage.
+
+       100% = new battery
+       0% = 80% SOH
+    */
+
+    let lifePercentage =
+
+        (
+            (soh - endOfLifeSOH) /
+            (100 - endOfLifeSOH)
+        ) * 100;
+
+
+    lifePercentage =
+        Math.max(
+            0,
+            Math.min(
+                100,
+                lifePercentage
+            )
+        );
+
+
+    /*
+       Update main prediction.
+    */
+
+    document.getElementById(
+        "remainingYears"
+    ).textContent =
+        remainingYears.toFixed(1);
+
+
+    document.getElementById(
+        "remainingMonths"
+    ).textContent =
+        Math.round(remainingMonths);
+
+
+    document.getElementById(
+        "remainingCycles"
+    ).textContent =
+        Math.round(remainingCycles);
+
+
+    document.getElementById(
+        "cyclesUsed"
+    ).textContent =
+        Math.round(totalEFC);
+
+
+    document.getElementById(
+        "totalCycles"
+    ).textContent =
+        totalEFC.toFixed(1);
+
+
+    document.getElementById(
+        "predictedSOH"
+    ).textContent =
+        Math.round(soh) + "%";
+
+
+    document.getElementById(
+        "lifePercent"
+    ).textContent =
+        Math.round(lifePercentage);
+
+
+    document.getElementById(
+        "lifeBar"
+    ).style.width =
+        lifePercentage + "%";
+
+
+    /*
+       Update health display.
+    */
+
+    document.getElementById(
+        "healthPercent"
+    ).textContent =
+        Math.round(soh) + "%";
+
+
+    document.getElementById(
+        "batteryScreenSOH"
+    ).textContent =
+        Math.round(soh) + "%";
+
+
+    let healthTitle =
+        document.getElementById(
+            "healthTitle"
+        );
+
+
+    if(soh >= 90){
+
+        healthTitle.textContent =
+            "Excellent Health";
+
+    }
+    else if(soh >= 85){
+
+        healthTitle.textContent =
+            "Good Health";
+
+    }
+    else if(soh >= 80){
+
+        healthTitle.textContent =
+            "Fair Health";
+
+    }
+    else{
+
+        healthTitle.textContent =
+            "Battery Replacement Recommended";
+
+    }
+
+
+    /*
+       Future predictions.
+    */
+
+    function predictedSOH(cycles){
+
+        let value =
+            100 -
+            (
+                cycles /
+                designCycleLife
+            ) * 20;
+
+
+        return Math.max(
+            0,
+            value
+        );
+
+    }
+
+
+    document.getElementById(
+        "soh500"
+    ).textContent =
+        Math.round(
+            predictedSOH(500)
+        ) + "%";
+
+
+    document.getElementById(
+        "soh1000"
+    ).textContent =
+        Math.round(
+            predictedSOH(1000)
+        ) + "%";
+
+
+    document.getElementById(
+        "soh1500"
+    ).textContent =
+        Math.round(
+            predictedSOH(1500)
+        ) + "%";
+
+}
+
+
+/* =====================================================
+   SENSOR VALUES
+===================================================== */
+
+function updateValues(){
+
+    voltageElement.textContent =
+        voltage.toFixed(2);
+
+
+    currentElement.textContent =
+        current.toFixed(2);
+
+
+    powerElement.textContent =
+        (
+            voltage *
+            current
+        ).toFixed(2);
+
+
+    tempElement.textContent =
+        temperature.toFixed(1);
+
+
+    chartValue.textContent =
+        voltage.toFixed(2) +
+        " V";
+
+
+    /*
+       Maximum temperature.
+    */
+
+    if(
+        temperature >
+        maxTemperature
+    ){
+
+        maxTemperature =
+            temperature;
+
+    }
+
+
+    document.getElementById(
+        "maxTemp"
+    ).textContent =
+        maxTemperature.toFixed(1);
+
+
+    /*
+       Current samples.
+    */
+
+    if(current > 0){
+
+        currentSamples.push(current);
+
+    }
+
+
+    if(currentSamples.length > 100){
+
+        currentSamples.shift();
+
+    }
+
+
+    let averageCurrent = 0;
+
+
+    if(currentSamples.length){
+
+        averageCurrent =
+            currentSamples.reduce(
+                (a,b) => a+b,
+                0
+            ) /
+            currentSamples.length;
+
+    }
+
+
+    document.getElementById(
+        "avgCurrent"
+    ).textContent =
+        averageCurrent.toFixed(2);
+
+
+    /*
+       Energy display.
+    */
+
+    document.getElementById(
+        "energyCharged"
+    ).textContent =
+        energy.toFixed(1);
+
+
+    /*
+       Charging time.
+    */
+
+    let minutes =
+        Math.floor(
+            chargingSeconds / 60
+        );
+
+
+    document.getElementById(
+        "chargingTime"
+    ).textContent =
+        minutes + "m";
+
+}
+
+
+/* =====================================================
+   STATUS
+===================================================== */
+
+function updateStatus(){
+
+    if(!charging){
+
+        statusElement.textContent =
+            "CHARGER OFF";
+
+        return;
+
+    }
+
+
+    if(soc >= cutoff){
+
+        statusElement.textContent =
+            "CHARGE COMPLETE";
+
+        charging = false;
+
+        current = 0;
+
+        showToast(
+            "Charging cutoff reached"
+        );
+
+        return;
+
+    }
+
+
+    statusElement.textContent =
+        "CHARGING";
+
+}
+
+
+/* =====================================================
+   CUTOFF
+===================================================== */
+
+function updateCutoff(){
+
+    cutoff =
+        Number(
+            slider.value
+        );
+
+
+    cutoffDisplay.textContent =
+        cutoff + "%";
+
+
+    cutoffTop.textContent =
+        cutoff + "%";
+
+}
+
+
+slider.addEventListener(
+    "input",
+    updateCutoff
+);
+
+
+function changeCutoff(amount){
+
+    let value =
+        cutoff + amount;
+
+
+    value =
+        Math.max(
+            50,
+            Math.min(
+                95,
+                value
+            )
+        );
+
+
+    slider.value =
+        value;
+
+
+    updateCutoff();
+
+
+    showToast(
+        "Cutoff set to " +
+        value +
+        "%"
+    );
+
+}
+
+
+/* =====================================================
+   START CHARGING
+===================================================== */
+
+function startCharging(){
+
+    if(soc >= cutoff){
+
+        showToast(
+            "Increase cutoff first"
+        );
+
+        return;
+
+    }
+
+
+    charging = true;
+
+    updateStatus();
+
+
+    showToast(
+        "⚡ Charging started"
+    );
+
+}
+
+
+/* =====================================================
+   STOP CHARGING
+===================================================== */
+
+function stopCharging(){
+
+    charging = false;
+
+    current = 0;
+
+    updateValues();
+
+    updateStatus();
+
+
+    showToast(
+        "■ Charger stopped"
+    );
+
+}
+
+
+/* =====================================================
+   GRAPH
+===================================================== */
+
+function updateGraph(){
+
+    let points = "";
+
+    let areaPoints =
+        "M0 120 ";
+
+
+    chartValues.forEach(
+        (value,index) => {
+
+            let x =
+                index *
+                (
+                    500 /
+                    (
+                        chartValues.length -
+                        1
+                    )
+                );
+
+
+            let normalized =
+                (
+                    value - 9.0
+                ) /
+                3.6;
+
+
+            normalized =
+                Math.max(
+                    0,
+                    Math.min(
+                        1,
+                        normalized
+                    )
+                );
+
+
+            let y =
+                110 -
+                normalized * 85;
+
+
+            points +=
+                `${x},${y} `;
+
+
+            areaPoints +=
+                `L${x} ${y} `;
+
+        }
+    );
+
+
+    areaPoints +=
+        "L500 120 L0 120 Z";
+
+
+    graph.setAttribute(
+        "d",
+        "M" + points
+    );
+
+
+    area.setAttribute(
+        "d",
+        areaPoints
+    );
+
+}
+
+
+/* =====================================================
+   ESP32 SIMULATION
+===================================================== */
+
+function simulateESP32(){
+
+    /*
+       1.2 seconds between samples.
+    */
+
+    const intervalSeconds =
+        1.2;
+
+
+    if(charging){
+
+        /*
+           Simulated safe charging current.
+
+           Maximum configured current = 2 A.
+        */
+
+        current =
+            1.70 +
+            Math.random() * 0.30;
+
+
+        /*
+           Slowly increase SOC.
+        */
+
+        if(soc < cutoff){
+
+            const previousSOC =
+                soc;
+
+
+            /*
+               Approximate SOC increase.
+
+               This is simulation only.
+            */
+
+            soc += 0.035;
+
+
+            soc =
+                Math.min(
+                    soc,
+                    cutoff
+                );
+
+
+            /*
+               Calculate EFC from
+               actual current flow.
+
+               EFC =
+               Ah used / pack capacity.
+            */
+
+            const ampHours =
+                current *
+                (
+                    intervalSeconds /
+                    3600
+                );
+
+
+            const cycleFraction =
+                ampHours /
+                batteryCapacityAh;
+
+
+            totalEFC +=
+                cycleFraction;
+
+
+            /*
+               Energy calculation.
+            */
+
+            energy +=
+                (
+                    voltage *
+                    current *
+                    intervalSeconds
+                ) /
+                3600;
+
+
+            chargingSeconds +=
+                intervalSeconds;
+
+        }
+
+
+        /*
+           Li-ion 3S charging voltage model.
+
+           12.6 V = full charge.
+        */
+
+        voltage =
+            11.40 +
+            (
+                soc /
+                100
+            ) * 1.20;
+
+
+        /*
+           Small realistic noise.
+        */
+
+        voltage +=
+            (
+                Math.random() -
+                0.5
+            ) * 0.03;
+
+
+        /*
+           Temperature.
+        */
+
+        temperature =
+            30.5 +
+            Math.random() * 3;
+
+
+        /*
+           Automatic cutoff.
+        */
+
+        if(soc >= cutoff){
+
+            soc =
+                cutoff;
+
+            charging =
+                false;
+
+            current =
+                0;
+
+            showToast(
+                "✓ Charge complete"
+            );
+
+        }
+
+    }
+    else{
+
+        current = 0;
+
+
+        /*
+           Resting battery voltage model.
+
+           9.0 V = very low
+           12.6 V = full
+        */
+
+        voltage =
+            9.00 +
+            (
+                soc /
+                100
+            ) * 3.60;
+
+
+        voltage +=
+            (
+                Math.random() -
+                0.5
+            ) * 0.04;
+
+
+        temperature =
+            29.5 +
+            Math.random() * 2;
+
+    }
+
+
+    /*
+       Store voltage history.
+    */
+
+    chartValues.push(
+        voltage
+    );
+
+
+    if(chartValues.length > 12){
+
+        chartValues.shift();
+
+    }
+
+
+    updateBattery();
+
+    updateValues();
+
+    updateStatus();
+
+    updateGraph();
+
+    updateBatteryLifePrediction();
+
+}
+
+
+/* =====================================================
+   SETTINGS TOGGLE
+===================================================== */
+
+function toggleSetting(element){
+
+    element.classList.toggle("on");
+
+
+    showToast(
+
+        element.classList.contains("on")
+
+        ? "Setting enabled"
+
+        : "Setting disabled"
+
+    );
+
+}
+
+
+/* =====================================================
+   TOAST
+===================================================== */
+
+function showToast(message){
+
+    const toast =
+        document.getElementById(
+            "toast"
+        );
+
+
+    toast.textContent =
+        message;
+
+
+    toast.classList.add(
+        "show"
+    );
+
+
+    setTimeout(
+        () => {
+
+            toast.classList.remove(
+                "show"
+            );
+
+        },
+        1800
+    );
+
+}
+
+
+/* =====================================================
+   INITIALIZE
+===================================================== */
+
+updateCutoff();
+
+updateBattery();
+
+updateValues();
+
+updateStatus();
+
+updateGraph();
+
+updateBatteryLifePrediction();
+
+
+/* =====================================================
+   LIVE UPDATE
+===================================================== */
+
+setInterval(
+    simulateESP32,
+    1200
+);
+
+</script>
+
+</body>
+</html>
