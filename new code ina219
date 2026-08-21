@@ -1,0 +1,2273 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_INA219.h>
+#include <math.h>
+
+/*
+================================================================
+       SMART 3S3P BATTERY MONITORING & CHARGING CUTOFF
+       ESP32 + INA219 + LCD + POT + RELAY + LEDs
+================================================================
+
+BATTERY:
+  Configuration : 3S3P
+  Nominal       : 11.1 V
+  Full charge   : 12.6 V
+  Capacity      : 10.5 Ah
+
+INA219:
+  Voltage : Battery voltage
+  Current : Charging current
+  Power   : V x I
+
+TEMPERATURE:
+  10K potentiometer
+  Wiper -> GPIO 32
+
+LCD:
+  16x2 I2C
+  Address 0x27
+
+RELAY:
+  GPIO 4
+
+BUTTONS:
+  UP   -> GPIO 33
+  DOWN -> GPIO 14
+
+LEDs:
+  RED   -> GPIO 25 = Charging
+  GREEN -> GPIO 26 = Complete
+  BLUE  -> GPIO 27 = Fault
+
+I2C:
+  SDA -> GPIO 21
+  SCL -> GPIO 22
+================================================================
+*/
+
+
+// ================================================================
+// LCD
+// ================================================================
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+
+// ================================================================
+// INA219
+// ================================================================
+
+Adafruit_INA219 ina219;
+
+
+// ================================================================
+// I2C PINS
+// ================================================================
+
+const uint8_t SDA_PIN = 21;
+const uint8_t SCL_PIN = 22;
+
+
+// ================================================================
+// PIN ASSIGNMENTS
+// ================================================================
+
+const uint8_t TEMP_PIN = 32;
+
+const uint8_t RELAY_PIN = 4;
+
+const uint8_t BUTTON_UP_PIN   = 33;
+const uint8_t BUTTON_DOWN_PIN = 14;
+
+const uint8_t RED_LED_PIN   = 25;
+const uint8_t GREEN_LED_PIN = 26;
+const uint8_t BLUE_LED_PIN  = 27;
+
+
+// ================================================================
+// HARDWARE POLARITY
+// ================================================================
+
+const bool RELAY_ACTIVE_LOW = true;
+
+const bool LED_ACTIVE_HIGH = true;
+
+
+// ================================================================
+// BATTERY PARAMETERS
+// ================================================================
+
+const float BATTERY_NOMINAL_VOLTAGE = 11.10f;
+
+const float BATTERY_FULL_VOLTAGE = 12.60f;
+
+const float BATTERY_LOW_VOLTAGE = 9.00f;
+
+const float BATTERY_CAPACITY_AH = 10.5f;
+
+
+// ================================================================
+// VALID INA219 VOLTAGE RANGE
+// ================================================================
+
+const float MIN_VALID_VOLTAGE = 8.40f;
+
+const float MAX_VALID_VOLTAGE = 13.00f;
+
+
+// ================================================================
+// SAFETY LIMITS
+// ================================================================
+
+const float OVER_VOLTAGE_LIMIT = 12.65f;
+
+const float LOW_VOLTAGE_LIMIT = 9.00f;
+
+
+// ================================================================
+// CURRENT CALIBRATION
+// ================================================================
+
+const float CURRENT_CALIBRATION = 1.0000f;
+
+const float CURRENT_OFFSET_A = 0.0000f;
+
+
+// ================================================================
+// VOLTAGE CALIBRATION
+// ================================================================
+//
+// Your measurement:
+//
+// Multimeter = 12.80 V
+// INA219      = 12.33 V
+//
+// Difference = 12.80 - 12.33
+//            = 0.47 V
+//
+// Therefore +0.47 V correction is applied.
+//
+// If you later recalibrate, change ONLY this value.
+// ================================================================
+
+const float VOLTAGE_OFFSET_V = 0.47f;
+
+
+// ================================================================
+// CURRENT DIRECTION
+// ================================================================
+
+const float CURRENT_DIRECTION = 1.0f;
+
+
+// ================================================================
+// MAXIMUM SOFTWARE CURRENT LIMIT
+// ================================================================
+
+const float MAX_CHARGE_CURRENT_A = 2.00f;
+
+
+// ================================================================
+// CURRENT NOISE FILTER
+// ================================================================
+
+const float CURRENT_ZERO_THRESHOLD_A = 0.005f;
+
+
+// ================================================================
+// TEMPERATURE POTENTIOMETER
+// ================================================================
+
+const float TEMP_MIN_C = 20.0f;
+
+const float TEMP_MAX_C = 80.0f;
+
+
+// ================================================================
+// TEMPERATURE SAFETY
+// ================================================================
+
+const float MAX_BATTERY_TEMPERATURE_C = 45.0f;
+
+
+// ================================================================
+// SOC CUTOFF
+// ================================================================
+
+int cutoffSOC = 75;
+
+const int MIN_CUTOFF_SOC = 50;
+
+const int MAX_CUTOFF_SOC = 95;
+
+const int CUTOFF_STEP = 5;
+
+
+// ================================================================
+// TIMING
+// ================================================================
+
+const unsigned long SENSOR_INTERVAL_MS = 500;
+
+const unsigned long LCD_INTERVAL_MS = 500;
+
+const unsigned long SERIAL_INTERVAL_MS = 1000;
+
+const unsigned long LCD_PAGE_INTERVAL_MS = 3000;
+
+const unsigned long BUTTON_DEBOUNCE_MS = 250;
+
+
+// ================================================================
+// SENSOR AVERAGING
+// ================================================================
+
+const uint8_t INA_SAMPLES = 20;
+
+const uint8_t TEMP_SAMPLES = 30;
+
+
+// ================================================================
+// VARIABLES
+// ================================================================
+
+float batteryVoltage = 0.0f;
+
+float chargingCurrentA = 0.0f;
+
+float chargingCurrentmA = 0.0f;
+
+float chargingPowerW = 0.0f;
+
+float batteryTemperature = 20.0f;
+
+
+// Raw INA219 values
+
+float rawBusVoltage = 0.0f;
+
+float rawShuntVoltage_mV = 0.0f;
+
+float rawCurrentmA = 0.0f;
+
+
+// Filtered values
+
+float filteredVoltage = 0.0f;
+
+float filteredCurrentA = 0.0f;
+
+
+// SOC/SOH
+
+int batterySOC = 0;
+
+int batterySOH = 96;
+
+
+// ================================================================
+// STATUS FLAGS
+// ================================================================
+
+bool ina219Connected = false;
+
+bool chargingActive = false;
+
+bool chargingComplete = false;
+
+
+// ================================================================
+// FAULT FLAGS
+// ================================================================
+
+bool sensorFault = false;
+
+bool overVoltageFault = false;
+
+bool lowVoltageFault = false;
+
+bool overCurrentFault = false;
+
+bool highTemperatureFault = false;
+
+bool masterFault = false;
+
+
+// ================================================================
+// LCD PAGE
+// ================================================================
+
+uint8_t lcdPage = 0;
+
+
+// ================================================================
+// TIMERS
+// ================================================================
+
+unsigned long lastSensorMillis = 0;
+
+unsigned long lastLCDMillis = 0;
+
+unsigned long lastSerialMillis = 0;
+
+unsigned long lastPageMillis = 0;
+
+unsigned long lastButtonMillis = 0;
+
+
+// ================================================================
+// OUTPUT FUNCTION
+// ================================================================
+
+void writeOutput(
+    uint8_t pin,
+    bool state,
+    bool activeHigh
+)
+{
+    bool level =
+        activeHigh ? state : !state;
+
+    digitalWrite(
+        pin,
+        level ? HIGH : LOW
+    );
+}
+
+
+// ================================================================
+// RELAY
+// ================================================================
+
+void setRelay(bool state)
+{
+    writeOutput(
+        RELAY_PIN,
+        state,
+        !RELAY_ACTIVE_LOW
+    );
+}
+
+
+// ================================================================
+// LED
+// ================================================================
+
+void setLED(
+    uint8_t pin,
+    bool state
+)
+{
+    writeOutput(
+        pin,
+        state,
+        LED_ACTIVE_HIGH
+    );
+}
+
+
+// ================================================================
+// ALL OUTPUTS OFF
+// ================================================================
+
+void allOutputsOff()
+{
+    setRelay(false);
+
+    setLED(
+        RED_LED_PIN,
+        false
+    );
+
+    setLED(
+        GREEN_LED_PIN,
+        false
+    );
+
+    setLED(
+        BLUE_LED_PIN,
+        false
+    );
+}
+
+
+// ================================================================
+// INA219 INITIALIZATION
+// ================================================================
+
+bool initializeINA219()
+{
+    Serial.println();
+    Serial.println(
+        "=============================="
+    );
+
+    Serial.println(
+        "INITIALIZING INA219"
+    );
+
+    Serial.println(
+        "=============================="
+    );
+
+
+    if (!ina219.begin())
+    {
+        Serial.println(
+            "INA219 NOT FOUND"
+        );
+
+        Serial.println(
+            "Check SDA GPIO21"
+        );
+
+        Serial.println(
+            "Check SCL GPIO22"
+        );
+
+        Serial.println(
+            "Check VCC"
+        );
+
+        Serial.println(
+            "Check GND"
+        );
+
+        return false;
+    }
+
+
+    // --------------------------------------------------------
+    // 32V / 2A CALIBRATION
+    // --------------------------------------------------------
+
+    ina219.setCalibration_32V_2A();
+
+
+    Serial.println(
+        "INA219 FOUND"
+    );
+
+    Serial.println(
+        "Calibration: 32V / 2A"
+    );
+
+    Serial.print(
+        "Current calibration: "
+    );
+
+    Serial.println(
+        CURRENT_CALIBRATION,
+        4
+    );
+
+    Serial.print(
+        "Voltage offset: "
+    );
+
+    Serial.print(
+        VOLTAGE_OFFSET_V,
+        3
+    );
+
+    Serial.println(
+        " V"
+    );
+
+
+    return true;
+}
+
+
+// ================================================================
+// READ INA219
+// ================================================================
+
+void readINA219()
+{
+    if (!ina219Connected)
+    {
+        batteryVoltage = 0.0f;
+
+        chargingCurrentA = 0.0f;
+
+        chargingCurrentmA = 0.0f;
+
+        chargingPowerW = 0.0f;
+
+        return;
+    }
+
+
+    float voltageSum = 0.0f;
+
+    float currentSum_mA = 0.0f;
+
+    float shuntSum_mV = 0.0f;
+
+
+    // --------------------------------------------------------
+    // MULTIPLE INA219 READINGS
+    // --------------------------------------------------------
+
+    for (
+        uint8_t i = 0;
+        i < INA_SAMPLES;
+        i++
+    )
+    {
+        voltageSum +=
+            ina219.getBusVoltage_V();
+
+
+        currentSum_mA +=
+            ina219.getCurrent_mA();
+
+
+        shuntSum_mV +=
+            ina219.getShuntVoltage_mV();
+
+
+        delay(5);
+    }
+
+
+    // --------------------------------------------------------
+    // AVERAGE
+    // --------------------------------------------------------
+
+    float busVoltage =
+        voltageSum /
+        INA_SAMPLES;
+
+
+    float current_mA =
+        currentSum_mA /
+        INA_SAMPLES;
+
+
+    float shunt_mV =
+        shuntSum_mV /
+        INA_SAMPLES;
+
+
+    // --------------------------------------------------------
+    // SAVE RAW VALUES
+    // --------------------------------------------------------
+
+    rawBusVoltage =
+        busVoltage;
+
+    rawShuntVoltage_mV =
+        shunt_mV;
+
+    rawCurrentmA =
+        current_mA;
+
+
+    // --------------------------------------------------------
+    // CURRENT
+    // --------------------------------------------------------
+
+    float measuredCurrentA =
+        current_mA / 1000.0f;
+
+
+    measuredCurrentA *=
+        CURRENT_DIRECTION;
+
+
+    measuredCurrentA =
+        (
+            measuredCurrentA *
+            CURRENT_CALIBRATION
+        )
+        +
+        CURRENT_OFFSET_A;
+
+
+    // --------------------------------------------------------
+    // FOR CHARGING DISPLAY
+    // USE POSITIVE CURRENT
+    // --------------------------------------------------------
+
+    measuredCurrentA =
+        fabs(measuredCurrentA);
+
+
+    // --------------------------------------------------------
+    // REMOVE VERY SMALL CURRENT
+    // --------------------------------------------------------
+
+    if (
+        measuredCurrentA <
+        CURRENT_ZERO_THRESHOLD_A
+    )
+    {
+        measuredCurrentA = 0.0f;
+    }
+
+
+    // --------------------------------------------------------
+    // BATTERY VOLTAGE
+    // --------------------------------------------------------
+
+    float shuntVoltageV =
+        shunt_mV / 1000.0f;
+
+
+    // --------------------------------------------------------
+    // VOLTAGE CALIBRATION
+    // --------------------------------------------------------
+    //
+    // Original:
+    //
+    // measuredVoltage = busVoltage + shuntVoltageV;
+    //
+    // Corrected:
+    //
+    // measuredVoltage =
+    //     busVoltage +
+    //     shuntVoltageV +
+    //     VOLTAGE_OFFSET_V;
+    //
+    // --------------------------------------------------------
+
+    float measuredVoltage =
+        busVoltage +
+        shuntVoltageV +
+        VOLTAGE_OFFSET_V;
+
+
+    // --------------------------------------------------------
+    // VOLTAGE FILTER
+    // --------------------------------------------------------
+
+    if (
+        filteredVoltage < 0.01f
+    )
+    {
+        filteredVoltage =
+            measuredVoltage;
+    }
+    else
+    {
+        filteredVoltage =
+            (
+                filteredVoltage *
+                0.90f
+            )
+            +
+            (
+                measuredVoltage *
+                0.10f
+            );
+    }
+
+
+    // --------------------------------------------------------
+    // CURRENT FILTER
+    // --------------------------------------------------------
+
+    if (
+        filteredCurrentA < 0.001f
+    )
+    {
+        filteredCurrentA =
+            measuredCurrentA;
+    }
+    else
+    {
+        filteredCurrentA =
+            (
+                filteredCurrentA *
+                0.80f
+            )
+            +
+            (
+                measuredCurrentA *
+                0.20f
+            );
+    }
+
+
+    // --------------------------------------------------------
+    // FINAL VALUES
+    // --------------------------------------------------------
+
+    batteryVoltage =
+        filteredVoltage;
+
+
+    chargingCurrentA =
+        filteredCurrentA;
+
+
+    // --------------------------------------------------------
+    // CONVERT A -> mA
+    // --------------------------------------------------------
+
+    chargingCurrentmA =
+        chargingCurrentA *
+        1000.0f;
+
+
+    // --------------------------------------------------------
+    // POWER
+    // --------------------------------------------------------
+
+    chargingPowerW =
+        batteryVoltage *
+        chargingCurrentA;
+}
+
+
+// ================================================================
+// TEMPERATURE POTENTIOMETER
+// ================================================================
+
+float readTemperature()
+{
+    uint32_t adcTotal = 0;
+
+
+    for (
+        uint8_t i = 0;
+        i < TEMP_SAMPLES;
+        i++
+    )
+    {
+        adcTotal +=
+            analogRead(
+                TEMP_PIN
+            );
+
+        delayMicroseconds(500);
+    }
+
+
+    float adc =
+        (
+            float
+        )
+        adcTotal /
+        TEMP_SAMPLES;
+
+
+    // --------------------------------------------------------
+    // LIMIT ADC
+    // --------------------------------------------------------
+
+    if (adc < 0.0f)
+        adc = 0.0f;
+
+
+    if (adc > 4095.0f)
+        adc = 4095.0f;
+
+
+    // --------------------------------------------------------
+    // ADC -> TEMPERATURE
+    // --------------------------------------------------------
+
+    float temperature =
+        TEMP_MIN_C
+        +
+        (
+            adc / 4095.0f
+        )
+        *
+        (
+            TEMP_MAX_C -
+            TEMP_MIN_C
+        );
+
+
+    return temperature;
+}
+
+
+// ================================================================
+// SOC CALCULATION
+// ================================================================
+
+int calculateSOC(
+    float voltage
+)
+{
+    float soc;
+
+
+    if (voltage >= 12.60f)
+    {
+        soc = 100.0f;
+    }
+
+    else if (voltage >= 12.40f)
+    {
+        soc =
+            90.0f
+            +
+            (
+                (
+                    voltage -
+                    12.40f
+                )
+                /
+                0.20f
+            )
+            *
+            10.0f;
+    }
+
+    else if (voltage >= 12.20f)
+    {
+        soc =
+            80.0f
+            +
+            (
+                (
+                    voltage -
+                    12.20f
+                )
+                /
+                0.20f
+            )
+            *
+            10.0f;
+    }
+
+    else if (voltage >= 12.00f)
+    {
+        soc =
+            65.0f
+            +
+            (
+                (
+                    voltage -
+                    12.00f
+                )
+                /
+                0.20f
+            )
+            *
+            15.0f;
+    }
+
+    else if (voltage >= 11.70f)
+    {
+        soc =
+            45.0f
+            +
+            (
+                (
+                    voltage -
+                    11.70f
+                )
+                /
+                0.30f
+            )
+            *
+            20.0f;
+    }
+
+    else if (voltage >= 11.40f)
+    {
+        soc =
+            25.0f
+            +
+            (
+                (
+                    voltage -
+                    11.40f
+                )
+                /
+                0.30f
+            )
+            *
+            20.0f;
+    }
+
+    else if (voltage >= 11.10f)
+    {
+        soc =
+            15.0f
+            +
+            (
+                (
+                    voltage -
+                    11.10f
+                )
+                /
+                0.30f
+            )
+            *
+            10.0f;
+    }
+
+    else if (voltage >= 10.50f)
+    {
+        soc =
+            5.0f
+            +
+            (
+                (
+                    voltage -
+                    10.50f
+                )
+                /
+                0.60f
+            )
+            *
+            10.0f;
+    }
+
+    else if (voltage >= 9.00f)
+    {
+        soc =
+            (
+                (
+                    voltage -
+                    9.00f
+                )
+                /
+                1.50f
+            )
+            *
+            5.0f;
+    }
+
+    else
+    {
+        soc = 0.0f;
+    }
+
+
+    soc =
+        constrain(
+            soc,
+            0.0f,
+            100.0f
+        );
+
+
+    return (int)
+        roundf(soc);
+}
+
+
+// ================================================================
+// UPDATE FAULTS
+// ================================================================
+
+void updateFaults()
+{
+    // --------------------------------------------------------
+    // INA219
+    // --------------------------------------------------------
+
+    sensorFault =
+        !ina219Connected;
+
+
+    // --------------------------------------------------------
+    // VOLTAGE VALIDATION
+    // --------------------------------------------------------
+
+    if (
+        isnan(batteryVoltage) ||
+        batteryVoltage <
+        MIN_VALID_VOLTAGE ||
+        batteryVoltage >
+        MAX_VALID_VOLTAGE
+    )
+    {
+        sensorFault = true;
+    }
+
+
+    // --------------------------------------------------------
+    // CURRENT VALIDATION
+    // --------------------------------------------------------
+
+    if (
+        isnan(chargingCurrentA)
+    )
+    {
+        sensorFault = true;
+    }
+
+
+    // --------------------------------------------------------
+    // TEMPERATURE
+    // --------------------------------------------------------
+
+    if (
+        isnan(batteryTemperature)
+    )
+    {
+        sensorFault = true;
+    }
+
+
+    // --------------------------------------------------------
+    // OVER VOLTAGE
+    // --------------------------------------------------------
+
+    overVoltageFault =
+        batteryVoltage >=
+        OVER_VOLTAGE_LIMIT;
+
+
+    // --------------------------------------------------------
+    // LOW VOLTAGE
+    // --------------------------------------------------------
+
+    lowVoltageFault =
+        batteryVoltage <=
+        LOW_VOLTAGE_LIMIT;
+
+
+    // --------------------------------------------------------
+    // OVER CURRENT
+    // --------------------------------------------------------
+
+    overCurrentFault =
+        chargingCurrentA >=
+        MAX_CHARGE_CURRENT_A;
+
+
+    // --------------------------------------------------------
+    // HIGH TEMPERATURE
+    // --------------------------------------------------------
+
+    highTemperatureFault =
+        batteryTemperature >=
+        MAX_BATTERY_TEMPERATURE_C;
+
+
+    // --------------------------------------------------------
+    // MASTER FAULT
+    // --------------------------------------------------------
+
+    masterFault =
+        sensorFault
+        ||
+        overVoltageFault
+        ||
+        overCurrentFault
+        ||
+        highTemperatureFault;
+}
+
+
+// ================================================================
+// FAULT MESSAGE
+// ================================================================
+
+const char* getFaultMessage()
+{
+    if (sensorFault)
+        return "SENSOR FAULT";
+
+    if (overVoltageFault)
+        return "OVER VOLTAGE";
+
+    if (overCurrentFault)
+        return "OVER CURRENT";
+
+    if (highTemperatureFault)
+        return "HIGH TEMP";
+
+    if (lowVoltageFault)
+        return "LOW BATTERY";
+
+    return "NO FAULT";
+}
+
+
+// ================================================================
+// CHARGING CONTROL
+// ================================================================
+
+void controlCharging()
+{
+    // --------------------------------------------------------
+    // SAFETY FAULT
+    // --------------------------------------------------------
+
+    if (masterFault)
+    {
+        chargingActive =
+            false;
+
+        chargingComplete =
+            false;
+
+        setRelay(false);
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // SOC CUTOFF
+    // --------------------------------------------------------
+
+    if (
+        batterySOC >=
+        cutoffSOC
+    )
+    {
+        chargingActive =
+            false;
+
+        chargingComplete =
+            true;
+
+        setRelay(false);
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // 12.6 V FULL CHARGE CUTOFF
+    // --------------------------------------------------------
+
+    if (
+        batteryVoltage >=
+        BATTERY_FULL_VOLTAGE
+    )
+    {
+        chargingActive =
+            false;
+
+        chargingComplete =
+            true;
+
+        setRelay(false);
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // NORMAL CHARGING
+    // --------------------------------------------------------
+
+    chargingActive =
+        true;
+
+    chargingComplete =
+        false;
+
+    setRelay(true);
+}
+
+
+// ================================================================
+// LED CONTROL
+// ================================================================
+
+void updateLEDs()
+{
+    setLED(
+        RED_LED_PIN,
+        false
+    );
+
+    setLED(
+        GREEN_LED_PIN,
+        false
+    );
+
+    setLED(
+        BLUE_LED_PIN,
+        false
+    );
+
+
+    // Fault
+    if (masterFault)
+    {
+        setLED(
+            BLUE_LED_PIN,
+            true
+        );
+
+        return;
+    }
+
+
+    // Complete
+    if (chargingComplete)
+    {
+        setLED(
+            GREEN_LED_PIN,
+            true
+        );
+
+        return;
+    }
+
+
+    // Charging
+    if (chargingActive)
+    {
+        setLED(
+            RED_LED_PIN,
+            true
+        );
+    }
+}
+
+
+// ================================================================
+// BUTTON CONTROL
+// ================================================================
+
+void handleButtons()
+{
+    unsigned long now =
+        millis();
+
+
+    if (
+        now -
+        lastButtonMillis
+        <
+        BUTTON_DEBOUNCE_MS
+    )
+    {
+        return;
+    }
+
+
+    bool upPressed =
+        digitalRead(
+            BUTTON_UP_PIN
+        ) == LOW;
+
+
+    bool downPressed =
+        digitalRead(
+            BUTTON_DOWN_PIN
+        ) == LOW;
+
+
+    // --------------------------------------------------------
+    // UP
+    // --------------------------------------------------------
+
+    if (
+        upPressed &&
+        !downPressed
+    )
+    {
+        cutoffSOC +=
+            CUTOFF_STEP;
+
+
+        if (
+            cutoffSOC >
+            MAX_CUTOFF_SOC
+        )
+        {
+            cutoffSOC =
+                MAX_CUTOFF_SOC;
+        }
+
+
+        if (
+            batterySOC <
+            cutoffSOC
+        )
+        {
+            chargingComplete =
+                false;
+        }
+
+
+        lastButtonMillis =
+            now;
+
+
+        Serial.print(
+            "Cutoff = "
+        );
+
+        Serial.print(
+            cutoffSOC
+        );
+
+        Serial.println(
+            "%"
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // DOWN
+    // --------------------------------------------------------
+
+    if (
+        downPressed &&
+        !upPressed
+    )
+    {
+        cutoffSOC -=
+            CUTOFF_STEP;
+
+
+        if (
+            cutoffSOC <
+            MIN_CUTOFF_SOC
+        )
+        {
+            cutoffSOC =
+                MIN_CUTOFF_SOC;
+        }
+
+
+        if (
+            batterySOC <
+            cutoffSOC
+        )
+        {
+            chargingComplete =
+                false;
+        }
+
+
+        lastButtonMillis =
+            now;
+
+
+        Serial.print(
+            "Cutoff = "
+        );
+
+        Serial.print(
+            cutoffSOC
+        );
+
+        Serial.println(
+            "%"
+        );
+    }
+}
+
+
+// ================================================================
+// LCD DISPLAY - NO BLINKING
+// ================================================================
+
+void updateLCD()
+{
+    // --------------------------------------------------------
+    // FAULT
+    // --------------------------------------------------------
+
+    if (masterFault)
+    {
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        if (sensorFault)
+            lcd.print("SENSOR FAULT   ");
+
+        else if (overVoltageFault)
+            lcd.print("OVER VOLTAGE   ");
+
+        else if (overCurrentFault)
+            lcd.print("OVER CURRENT   ");
+
+        else if (highTemperatureFault)
+            lcd.print("HIGH TEMP      ");
+
+        else if (lowVoltageFault)
+            lcd.print("LOW BATTERY    ");
+
+        else
+            lcd.print("FAULT          ");
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "CHARGER OFF    "
+        );
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // COMPLETE
+    // --------------------------------------------------------
+
+    if (chargingComplete)
+    {
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        lcd.print(
+            "CHARGE COMPLETE"
+        );
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "SOC : "
+        );
+
+        lcd.print(
+            batterySOC
+        );
+
+        lcd.print(
+            " %          "
+        );
+
+        return;
+    }
+
+
+    // ========================================================
+    // PAGE 0
+    // VOLTAGE + CURRENT
+    // ========================================================
+
+    if (
+        lcdPage == 0
+    )
+    {
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        lcd.print(
+            "V : "
+        );
+
+        lcd.print(
+            batteryVoltage,
+            2
+        );
+
+        lcd.print(
+            " V     "
+        );
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "I : "
+        );
+
+        lcd.print(
+            chargingCurrentmA,
+            0
+        );
+
+        lcd.print(
+            " mA    "
+        );
+
+        return;
+    }
+
+
+    // ========================================================
+    // PAGE 1
+    // POWER + SOC
+    // ========================================================
+
+    if (
+        lcdPage == 1
+    )
+    {
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        lcd.print(
+            "P : "
+        );
+
+        lcd.print(
+            chargingPowerW,
+            1
+        );
+
+        lcd.print(
+            " W      "
+        );
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "SOC : "
+        );
+
+        lcd.print(
+            batterySOC
+        );
+
+        lcd.print(
+            " %       "
+        );
+
+        return;
+    }
+
+
+    // ========================================================
+    // PAGE 2
+    // SOC + SOH
+    // ========================================================
+
+    if (
+        lcdPage == 2
+    )
+    {
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        lcd.print(
+            "SOC : "
+        );
+
+        lcd.print(
+            batterySOC
+        );
+
+        lcd.print(
+            " %       "
+        );
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "SOH : "
+        );
+
+        lcd.print(
+            batterySOH
+        );
+
+        lcd.print(
+            " %       "
+        );
+
+        return;
+    }
+
+
+    // ========================================================
+    // PAGE 3
+    // TEMPERATURE + CUTOFF
+    // ========================================================
+
+    if (
+        lcdPage == 3
+    )
+    {
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        lcd.print(
+            "TEMP : "
+        );
+
+        lcd.print(
+            batteryTemperature,
+            1
+        );
+
+        lcd.print(
+            " C    "
+        );
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "CUT : "
+        );
+
+        lcd.print(
+            cutoffSOC
+        );
+
+        lcd.print(
+            " %       "
+        );
+
+        return;
+    }
+}
+
+
+// ================================================================
+// SERIAL MONITOR
+// ================================================================
+
+void printSerial()
+{
+    Serial.println();
+
+    Serial.println(
+        "========================================"
+    );
+
+    Serial.println(
+        "       3S3P SMART BATTERY MONITOR"
+    );
+
+    Serial.println(
+        "========================================"
+    );
+
+
+    // --------------------------------------------------------
+    // VOLTAGE
+    // --------------------------------------------------------
+
+    Serial.print(
+        "Battery Voltage   : "
+    );
+
+    Serial.print(
+        batteryVoltage,
+        3
+    );
+
+    Serial.println(
+        " V"
+    );
+
+
+    // --------------------------------------------------------
+    // CURRENT
+    // --------------------------------------------------------
+
+    Serial.print(
+        "Current            : "
+    );
+
+    Serial.print(
+        chargingCurrentmA,
+        1
+    );
+
+    Serial.println(
+        " mA"
+    );
+
+
+    // --------------------------------------------------------
+    // POWER
+    // --------------------------------------------------------
+
+    Serial.print(
+        "Power              : "
+    );
+
+    Serial.print(
+        chargingPowerW,
+        2
+    );
+
+    Serial.println(
+        " W"
+    );
+
+
+    // --------------------------------------------------------
+    // TEMPERATURE
+    // --------------------------------------------------------
+
+    Serial.print(
+        "Temperature        : "
+    );
+
+    Serial.print(
+        batteryTemperature,
+        1
+    );
+
+    Serial.println(
+        " C"
+    );
+
+
+    // --------------------------------------------------------
+    // SOC
+    // --------------------------------------------------------
+
+    Serial.print(
+        "SOC                : "
+    );
+
+    Serial.print(
+        batterySOC
+    );
+
+    Serial.println(
+        "%"
+    );
+
+
+    // --------------------------------------------------------
+    // SOH
+    // --------------------------------------------------------
+
+    Serial.print(
+        "SOH                : "
+    );
+
+    Serial.print(
+        batterySOH
+    );
+
+    Serial.println(
+        "%"
+    );
+
+
+    // --------------------------------------------------------
+    // CUTOFF
+    // --------------------------------------------------------
+
+    Serial.print(
+        "Cutoff             : "
+    );
+
+    Serial.print(
+        cutoffSOC
+    );
+
+    Serial.println(
+        "%"
+    );
+
+
+    // --------------------------------------------------------
+    // INA219 RAW
+    // --------------------------------------------------------
+
+    Serial.println(
+        "----------------------------------------"
+    );
+
+    Serial.print(
+        "INA219 Bus         : "
+    );
+
+    Serial.print(
+        rawBusVoltage,
+        3
+    );
+
+    Serial.println(
+        " V"
+    );
+
+
+    Serial.print(
+        "INA219 Shunt       : "
+    );
+
+    Serial.print(
+        rawShuntVoltage_mV,
+        3
+    );
+
+    Serial.println(
+        " mV"
+    );
+
+
+    Serial.print(
+        "INA219 Raw Current : "
+    );
+
+    Serial.print(
+        rawCurrentmA,
+        2
+    );
+
+    Serial.println(
+        " mA"
+    );
+
+
+    // --------------------------------------------------------
+    // STATUS
+    // --------------------------------------------------------
+
+    Serial.println(
+        "----------------------------------------"
+    );
+
+    Serial.print(
+        "INA219             : "
+    );
+
+    Serial.println(
+        ina219Connected
+        ? "OK"
+        : "NOT FOUND"
+    );
+
+
+    Serial.print(
+        "Relay              : "
+    );
+
+    Serial.println(
+        chargingActive
+        ? "ON"
+        : "OFF"
+    );
+
+
+    Serial.print(
+        "Status             : "
+    );
+
+
+    if (masterFault)
+    {
+        Serial.println(
+            getFaultMessage()
+        );
+    }
+
+    else if (chargingComplete)
+    {
+        Serial.println(
+            "CHARGE COMPLETE"
+        );
+    }
+
+    else
+    {
+        Serial.println(
+            "CHARGING"
+        );
+    }
+
+
+    Serial.println(
+        "========================================"
+    );
+}
+
+
+// ================================================================
+// SETUP
+// ================================================================
+
+void setup()
+{
+    Serial.begin(
+        115200
+    );
+
+
+    delay(1000);
+
+
+    // ============================================================
+    // GPIO
+    // ============================================================
+
+    pinMode(
+        RELAY_PIN,
+        OUTPUT
+    );
+
+
+    pinMode(
+        RED_LED_PIN,
+        OUTPUT
+    );
+
+
+    pinMode(
+        GREEN_LED_PIN,
+        OUTPUT
+    );
+
+
+    pinMode(
+        BLUE_LED_PIN,
+        OUTPUT
+    );
+
+
+    pinMode(
+        BUTTON_UP_PIN,
+        INPUT_PULLUP
+    );
+
+
+    pinMode(
+        BUTTON_DOWN_PIN,
+        INPUT_PULLUP
+    );
+
+
+    pinMode(
+        TEMP_PIN,
+        INPUT
+    );
+
+
+    // ============================================================
+    // OUTPUTS OFF
+    // ============================================================
+
+    allOutputsOff();
+
+
+    // ============================================================
+    // ESP32 ADC
+    // ============================================================
+
+    analogReadResolution(
+        12
+    );
+
+
+    analogSetPinAttenuation(
+        TEMP_PIN,
+        ADC_11db
+    );
+
+
+    // ============================================================
+    // I2C
+    // ============================================================
+
+    Wire.begin(
+        SDA_PIN,
+        SCL_PIN
+    );
+
+
+    // ============================================================
+    // LCD
+    // ============================================================
+
+    lcd.init();
+
+    lcd.backlight();
+
+    lcd.clear();
+
+
+    lcd.setCursor(
+        0,
+        0
+    );
+
+    lcd.print(
+        "SMART BATTERY"
+    );
+
+
+    lcd.setCursor(
+        0,
+        1
+    );
+
+    lcd.print(
+        "3S3P SYSTEM"
+    );
+
+
+    delay(2000);
+
+
+    // ============================================================
+    // INA219
+    // ============================================================
+
+    ina219Connected =
+        initializeINA219();
+
+
+    // ============================================================
+    // INA219 ERROR
+    // ============================================================
+
+    if (!ina219Connected)
+    {
+        lcd.clear();
+
+
+        lcd.setCursor(
+            0,
+            0
+        );
+
+        lcd.print(
+            "INA219 ERROR"
+        );
+
+
+        lcd.setCursor(
+            0,
+            1
+        );
+
+        lcd.print(
+            "CHECK WIRING"
+        );
+
+
+        setRelay(false);
+
+
+        setLED(
+            BLUE_LED_PIN,
+            true
+        );
+
+
+        while (true)
+        {
+            delay(1000);
+        }
+    }
+
+
+    // ============================================================
+    // SYSTEM READY
+    // ============================================================
+
+    lcd.clear();
+
+
+    lcd.setCursor(
+        0,
+        0
+    );
+
+    lcd.print(
+        "SYSTEM READY"
+    );
+
+
+    lcd.setCursor(
+        0,
+        1
+    );
+
+    lcd.print(
+        "INA219 OK"
+    );
+
+
+    delay(1500);
+
+
+    // ============================================================
+    // TIMERS
+    // ============================================================
+
+    lastSensorMillis =
+        millis();
+
+    lastLCDMillis =
+        millis();
+
+    lastSerialMillis =
+        millis();
+
+    lastPageMillis =
+        millis();
+}
+
+
+// ================================================================
+// LOOP
+// ================================================================
+
+void loop()
+{
+    unsigned long now =
+        millis();
+
+
+    // ============================================================
+    // BUTTONS
+    // ============================================================
+
+    handleButtons();
+
+
+    // ============================================================
+    // SENSOR UPDATE
+    // ============================================================
+
+    if (
+        now -
+        lastSensorMillis
+        >=
+        SENSOR_INTERVAL_MS
+    )
+    {
+        lastSensorMillis =
+            now;
+
+
+        // --------------------------------------------------------
+        // INA219
+        // --------------------------------------------------------
+
+        readINA219();
+
+
+        // --------------------------------------------------------
+        // TEMPERATURE
+        // --------------------------------------------------------
+
+        batteryTemperature =
+            readTemperature();
+
+
+        // --------------------------------------------------------
+        // SOC
+        // --------------------------------------------------------
+
+        batterySOC =
+            calculateSOC(
+                batteryVoltage
+            );
+
+
+        // --------------------------------------------------------
+        // FAULTS
+        // --------------------------------------------------------
+
+        updateFaults();
+
+
+        // --------------------------------------------------------
+        // CHARGING CONTROL
+        // --------------------------------------------------------
+
+        controlCharging();
+
+
+        // --------------------------------------------------------
+        // LEDs
+        // --------------------------------------------------------
+
+        updateLEDs();
+    }
+
+
+    // ============================================================
+    // LCD PAGE CHANGE
+    // ============================================================
+
+    if (
+        now -
+        lastPageMillis
+        >=
+        LCD_PAGE_INTERVAL_MS
+    )
+    {
+        lastPageMillis =
+            now;
+
+
+        lcdPage++;
+
+
+        if (
+            lcdPage > 3
+        )
+        {
+            lcdPage = 0;
+        }
+    }
+
+
+    // ============================================================
+    // LCD UPDATE
+    // ============================================================
+
+    if (
+        now -
+        lastLCDMillis
+        >=
+        LCD_INTERVAL_MS
+    )
+    {
+        lastLCDMillis =
+            now;
+
+
+        updateLCD();
+    }
+
+
+    // ============================================================
+    // SERIAL UPDATE
+    // ============================================================
+
+    if (
+        now -
+        lastSerialMillis
+        >=
+        SERIAL_INTERVAL_MS
+    )
+    {
+        lastSerialMillis =
+            now;
+
+
+        printSerial();
+    }
+}
